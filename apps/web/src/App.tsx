@@ -16,7 +16,7 @@ function App() {
     date: new Date(),
   });
   const savedNotes: TNote[] =
-    JSON.parse(localStorage.getItem("savedNotes") || "") || [];
+    JSON.parse(localStorage.getItem("savedNotes") || '[]') || [];
 
   const [notes, setNotes] = useState<TNote[]>(savedNotes);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -72,7 +72,7 @@ function App() {
 
   return (
     <div className="flex h-screen">
-      <div className={`mt-2 w-[${isSidebarOpen ? "15%" : "auto"}]`}>
+      <div className={`mt-2 ${isSidebarOpen ? 'min-w-[15%]' : ''}`}>
         <div className="flex items-center justify-between">
           {isSidebarOpen ? (
             <div className="ml-4">
@@ -99,7 +99,7 @@ function App() {
               {notes.map((n) => (
                 <div
                   key={n.id}
-                  className="my-1 btn btn-ghost flex items-center justify-start rounded-md  w-full"
+                  className="my-1 btn btn-ghost flex items-center justify-start rounded-md w-full"
                   onClick={(e) => handleSelectNote(e, n)}
                 >
                   <p className="">{n.value.slice(0, 25) || "Empty Journal"}</p>
