@@ -1,0 +1,13 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: light --default, dark --prefersdark, cupcake;
+}
+
+#root {
+  margin: 0 auto;
+  /* padding: 0 2rem; */
+}
+
+textarea {
+  outline: none;
+}
