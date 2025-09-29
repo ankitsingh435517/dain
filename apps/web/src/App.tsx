@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { v4 as uuidv4 } from "uuid";
 import "./App.css";
-import SidebarLeft from "./assets/sidebar-left.svg";
+import { FiSidebar } from "react-icons/fi";
+import { HiOutlinePencilAlt } from "react-icons/hi";
 
 type TNote = {
   value: string;
@@ -16,7 +17,7 @@ function App() {
     date: new Date(),
   });
   const savedNotes: TNote[] =
-    JSON.parse(localStorage.getItem("savedNotes") || '[]') || [];
+    JSON.parse(localStorage.getItem("savedNotes") || "[]") || [];
 
   const [notes, setNotes] = useState<TNote[]>(savedNotes);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -70,9 +71,22 @@ function App() {
     setNote(() => n);
   }
 
+  function handleCreateNewNote() {
+    if (!note.value) return;
+    // save current unsaved
+    saveNote();
+    // create a new empty note and add it in the state but don't save it yet
+    const newNote = {
+      value: "",
+      id: uuidv4(),
+      date: new Date(),
+    };
+    setNote(() => newNote);
+  }
+
   return (
     <div className="flex h-screen">
-      <div className={`mt-2 ${isSidebarOpen ? 'min-w-[15%]' : ''}`}>
+      <div className={`mt-2 ${isSidebarOpen ? "min-w-[15%]" : ""}`}>
         <div className="flex items-center justify-between">
           {isSidebarOpen ? (
             <div className="ml-4">
@@ -86,14 +100,20 @@ function App() {
               onClick={handleSideBarLeftClick}
               className="ml-2 btn btn-square bg-white border-0 rounded-none p-0 m-0 w-fit h-fit"
             >
-              <img src={SidebarLeft} width={20} />
+              <FiSidebar />
             </button>
           </div>
         </div>
         {isSidebarOpen ? (
           <div className="ml-4 mt-6">
-            <div>
+            <div className="flex items-center">
               <p className="text-md text-gray-600">Journals</p>
+              <button
+                onClick={handleCreateNewNote}
+                className="ml-2 btn btn-square bg-white border-0 rounded-none p-0 m-0 w-fit h-fit"
+              >
+                <HiOutlinePencilAlt />
+              </button>
             </div>
             <div className="mt-4 mr-2 flex flex-col items-start ">
               {notes.map((n) => (
