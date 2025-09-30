@@ -3,6 +3,8 @@ import { v4 as uuidv4 } from "uuid";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
+import cx from "classnames";
+import { useDebounce } from "./common/hooks";
 
 type TNote = {
   value: string;
@@ -21,8 +23,7 @@ function App() {
 
   const [notes, setNotes] = useState<TNote[]>(savedNotes);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  console.log("notes: ", notes);
+  const debounce = useDebounce();
 
   const saveNote = useCallback(() => {
     const { id } = note;
@@ -35,13 +36,19 @@ function App() {
       setNotes(() => updatedNotes);
     } else {
       // new note
-      setNotes((prev) => [...prev, note]);
+      if (note.value) {
+        setNotes((prev) => [...prev, note]);
+      }
     }
   }, [note, notes]);
 
   useEffect(() => {
     localStorage.setItem("savedNotes", JSON.stringify(notes));
   }, [notes]);
+
+  useEffect(() => {
+    debounce(saveNote);
+  }, [debounce, note, saveNote]);
 
   useEffect(() => {
     function handleSaveShortcut(e: WindowEventMap["keydown"]) {
@@ -86,7 +93,7 @@ function App() {
 
   return (
     <div className="flex h-screen">
-      <div className={`mt-2 ${isSidebarOpen ? "min-w-[15%]" : ""}`}>
+      <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "")}>
         <div className="flex items-center justify-between">
           {isSidebarOpen ? (
             <div className="ml-4">
@@ -119,10 +126,16 @@ function App() {
               {notes.map((n) => (
                 <div
                   key={n.id}
-                  className="my-1 btn btn-ghost flex items-center justify-start rounded-md w-full"
+                  className={cx(
+                    " p-2 btn btn-ghost flex items-center justify-start rounded-md w-full",
+                    note.id === n.id ? "btn-active" : ""
+                  )}
                   onClick={(e) => handleSelectNote(e, n)}
                 >
-                  <p className="">{n.value.slice(0, 25) || "Empty Journal"}</p>
+                  <p className="text-left">
+                    {n.value.slice(0, 25) +
+                      (n.value.length > 25 ? "..." : "") || "Empty Journal"}
+                  </p>
                 </div>
               ))}
             </div>
@@ -134,9 +147,9 @@ function App() {
         <div className="w-[55%] mx-auto">
           <textarea
             value={note.value}
-            onChange={(e) =>
-              setNote((prev) => ({ ...prev, value: e.target.value }))
-            }
+            onChange={(e) => {
+              setNote((prev) => ({ ...prev, value: e.target.value }));
+            }}
             spellCheck={false}
             autoFocus
             className="textarea textarea-ghost text-2xl w-full h-screen focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
