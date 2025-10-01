@@ -95,8 +95,8 @@ function App() {
   }
 
   return (
-    <div className="flex h-screen">
-      <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "")}>
+    <div className="flex">
+      <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "min-w-[2%]")}>
         <div className="flex items-center justify-between">
           {isSidebarOpen ? (
             <div className="ml-4 flex items-center justify-between">
@@ -110,12 +110,14 @@ function App() {
               </h1>
             </div>
           ) : null}
-          <div className="text-end">
+          <div
+            className={cx("w-full", isSidebarOpen ? "text-end" : "text-center")}
+          >
             <button
               onClick={handleSideBarLeftClick}
-              className="ml-2 btn btn-square bg-white border-0 rounded-none p-0 m-0 w-fit h-fit"
+              className="ml-2 btn btn-ghost border-0 rounded-md px-3"
             >
-              <FiSidebar />
+              <FiSidebar className="text-lg" />
             </button>
           </div>
         </div>
@@ -125,7 +127,7 @@ function App() {
               <p className="text-md text-gray-600">Journals</p>
               <button
                 onClick={handleCreateNewNote}
-                className="ml-2 btn btn-square bg-white border-0 rounded-none p-0 m-0 w-fit h-fit"
+                className="ml-2 btn btn-ghost border-0 rounded-md p-1.5 w-fit h-fit"
               >
                 <HiOutlinePencilAlt />
               </button>
@@ -150,7 +152,7 @@ function App() {
           </div>
         ) : null}
       </div>
-      <div className="m-0 divider divider-horizontal h-screen"></div>
+      <div className="m-0 divider divider-horizontal"></div>
       <div className="w-full h-screen">
         <div className="w-[55%] mx-auto">
           <textarea
