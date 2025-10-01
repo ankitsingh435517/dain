@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
@@ -18,6 +18,7 @@ function App() {
     id: uuidv4(),
     date: new Date(),
   });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const savedNotes: TNote[] =
     JSON.parse(localStorage.getItem("savedNotes") || "[]") || [];
 
@@ -76,6 +77,7 @@ function App() {
     if (!n.id) return;
 
     setNote(() => n);
+    textareaRef.current?.focus();
   }
 
   function handleCreateNewNote() {
@@ -89,6 +91,7 @@ function App() {
       date: new Date(),
     };
     setNote(() => newNote);
+    textareaRef.current?.focus();
   }
 
   return (
@@ -96,7 +99,12 @@ function App() {
       <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "")}>
         <div className="flex items-center justify-between">
           {isSidebarOpen ? (
-            <div className="ml-4">
+            <div className="ml-4 flex items-center justify-between">
+              <img
+                src="/src/assets/dain-transparent.png"
+                width={25}
+                className="mr-2"
+              />
               <h1 className="text-2xl">
                 <span className="text-gray-400">D</span>ain
               </h1>
@@ -132,7 +140,7 @@ function App() {
                   )}
                   onClick={(e) => handleSelectNote(e, n)}
                 >
-                  <p className="text-left">
+                  <p className="text-left font-medium">
                     {n.value.slice(0, 25) +
                       (n.value.length > 25 ? "..." : "") || "Empty Journal"}
                   </p>
@@ -146,6 +154,7 @@ function App() {
       <div className="w-full h-screen">
         <div className="w-[55%] mx-auto">
           <textarea
+            ref={textareaRef}
             value={note.value}
             onChange={(e) => {
               setNote((prev) => ({ ...prev, value: e.target.value }));
@@ -153,7 +162,7 @@ function App() {
             spellCheck={false}
             autoFocus
             className="textarea textarea-ghost text-2xl w-full h-screen focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
-            placeholder="Type your thoughts out & let your brain breathe. Hit Ctrl + s anytime to save"
+            placeholder="Type your thoughts out & let your brain breathe..."
           ></textarea>
         </div>
       </div>
