@@ -101,9 +101,13 @@ function App() {
           {isSidebarOpen ? (
             <div className="ml-4 flex items-center justify-between">
               <img
-                src="dain-transparent.png"
+                src="dain.svg"
                 width={25}
-                className="mr-2"
+                className="mr-2 w-[25px]"
+                alt="Logo"
+                loading="eager"
+                decoding="sync"
+                fetchPriority="high"
               />
               <h1 className="text-2xl">
                 <span className="text-gray-400">D</span>ain
