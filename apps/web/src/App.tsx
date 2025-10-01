@@ -101,7 +101,7 @@ function App() {
           {isSidebarOpen ? (
             <div className="ml-4 flex items-center justify-between">
               <img
-                src="/src/assets/dain-transparent.png"
+                src="dain-transparent.png"
                 width={25}
                 className="mr-2"
               />
