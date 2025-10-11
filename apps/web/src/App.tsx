@@ -94,6 +94,13 @@ function App() {
     textareaRef.current?.focus();
   }
 
+  // TODO:
+  // Add express app and mongodb atlas setup (free M0 cluster)
+  // Add auth
+  // add journal crud (create, list, read-single, update, delete)
+  // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for journal list in sidebar
+  // move on to the next features of Dain
+
   return (
     <div className="flex">
       <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "min-w-[2%]")}>
