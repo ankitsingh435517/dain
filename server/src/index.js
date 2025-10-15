@@ -26,7 +26,27 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const journalSchema = new mongoose.Schema(
+  {
+    title: {
+      type: String,
+      required: true,
+      default: "Untitled",
+    },
+    content: {
+      type: String,
+    },
+    author: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+      required: true,
+    },
+  },
+  { timestamps: true }
+);
+
 const UserModel = mongoose.model("user", userSchema, "users");
+const JournalModel = mongoose.model("journal", journalSchema, "journals");
 
 // mongoose connection
 try {
@@ -116,6 +136,43 @@ app.get("/me", async (req, res) => {
       return res.status(404).send("No user found!");
     }
     return res.status(200).json({ email: userInDb.email });
+  } catch (e) {
+    res.json({ message: e.message || "Something went wrong!" });
+  }
+});
+
+// TODO: add auth middleware and throw error if unauthorized
+app.post("/journals", async (req, res) => {
+  try {
+    const { title, content, authorId } = req.body;
+    const user = await UserModel.findById(authorId);
+    if (!user) {
+      throw new Error("Author not found!");
+    }
+    const journal = await JournalModel.create({
+      title,
+      content,
+      author: user._id,
+    });
+    return res.status(201).json({ journal });
+  } catch (e) {
+    res.json({ message: e.message || "Something went wrong!" });
+  }
+});
+app.get("/journals", (req, res) => {
+  try {
+  } catch (e) {
+    res.json({ message: e.message || "Something went wrong!" });
+  }
+});
+app.get("/journals/:id", (req, res) => {
+  try {
+  } catch (e) {
+    res.json({ message: e.message || "Something went wrong!" });
+  }
+});
+app.put("/journals", (req, res) => {
+  try {
   } catch (e) {
     res.json({ message: e.message || "Something went wrong!" });
   }
