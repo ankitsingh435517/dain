@@ -10,7 +10,7 @@ specifiers:
   jsonwebtoken: ^9.0.2
   mongodb: ^6.20.0
   mongoose: ^8.19.1
-  nodemon: ^3.1.10
+  nodemon: ^3.1.11
   prettier: 3.6.2
 
 dependencies:
@@ -25,7 +25,7 @@ devDependencies:
   '@eslint/js': 9.37.0
   eslint: 9.37.0
   globals: 16.4.0
-  nodemon: 3.1.10
+  nodemon: 3.1.11
   prettier: 3.6.2
 
 packages:
@@ -1056,8 +1056,8 @@ packages:
     engines: {node: '>= 0.6'}
     dev: false
 
-  /nodemon/3.1.10:
-    resolution: {integrity: sha512-WDjw3pJ0/0jMFmyNDp3gvY2YizjLmmOUQo6DEBY+JgdvW/yQ9mEeSw6H5ythl5Ny2ytb7f9C2nIbjSxMNzbJXw==}
+  /nodemon/3.1.11:
+    resolution: {integrity: sha512-is96t8F/1//UHAjNPHpbsNY46ELPpftGUoSVNXwUfMk/qdjSylYrWSu1XavVTBOn526kFiOR733ATgNBCQyH0g==}
     engines: {node: '>=10'}
     hasBin: true
     dependencies:
