@@ -12,6 +12,66 @@ type TNote = {
   date: Date;
 };
 
+function LoginRegisterScreen() {
+    const [isRegister, setIsRegister] = useState(false);
+    const handleSignUp = () => {
+      // TODO: Handle sign up logic here
+    };
+    const handleLogin = () => {
+      // TODO: Handle login logic here
+    }
+    if (isRegister) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen">
+              <h2 className="text-3xl mb-6">Create an Account</h2>
+              <div className="mb-4 flex flex-col">
+                  <input
+                    type="text"
+                    placeholder="Email"
+                    className="input input-bordered w-64 mb-2"
+                  />
+                <input
+                  type="text"
+                  placeholder="Username"
+                  className="input input-bordered w-64 mb-2"
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  className="input input-bordered w-64 mb-2"
+                />
+                <input
+                  type="password"
+                  placeholder="Confirm Password"
+                  className="input input-bordered w-64"
+                />
+              </div>
+              <button className="btn btn-secondary btn-lg" onClick={handleSignUp}>Sign Up</button>
+              <h5 className="mt-4 flex items-center">Already have an account? <button className="btn btn-link text-blue-500" onClick={() => setIsRegister(false)}>Login</button></h5>
+            </div>
+          );
+    }
+  return (
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h2 className="text-3xl mb-6">Welcome to Dain</h2>
+      <div className="mb-4 flex flex-col">
+        <input
+          type="text"
+          placeholder="Username or Email"
+          className="input input-bordered w-64 mb-2"
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          className="input input-bordered w-64"
+        />
+      </div>
+      <button className="btn btn-secondary btn-lg" onClick={handleLogin}>Login</button>
+      <h5 className="mt-4 flex items-center">Don't have an account? <button className="btn btn-link text-blue-500" onClick={() => setIsRegister(true)}>Sign up</button></h5>
+    </div>
+  );
+}
+
 function App() {
   const [note, setNote] = useState<TNote>({
     value: "",
@@ -95,9 +155,12 @@ function App() {
   }
 
   // TODO:
-  // Add express app and mongodb atlas setup (free M0 cluster)
-  // Add auth
-  // add journal crud (create, list, read-single, update, delete)
+  // Add auth (signup, login, logout)
+    const isLoggedIn = false;
+    if (!isLoggedIn) {
+        return <LoginRegisterScreen />;
+    }
+  // connect backend api to store and fetch journals
   // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for journal list in sidebar
   // move on to the next features of Dain
 
