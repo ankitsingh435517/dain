@@ -141,8 +141,19 @@ app.get("/me", async (req, res) => {
   }
 });
 
-// TODO: add auth middleware and throw error if unauthorized
-app.post("/journals", async (req, res) => {
+const authMiddleware = (req, res, next) => {
+  try {
+    const token = req.headers.authorization.split("Bearer ")[1];
+    if (!token) throw new Error("Invalid token!");
+    jwt.verify(token, process.env.JWT_SECRET);
+    next();
+  } catch (_) {
+    res.status(401).json({ message: "Unauthorized" });
+  }
+};
+
+// journal routes
+app.post("/journals", authMiddleware, async (req, res) => {
   try {
     const { title, content, authorId } = req.body;
     const user = await UserModel.findById(authorId);
@@ -159,20 +170,39 @@ app.post("/journals", async (req, res) => {
     res.json({ message: e.message || "Something went wrong!" });
   }
 });
-app.get("/journals", (req, res) => {
+app.get("/journals", authMiddleware, async (req, res) => {
   try {
+    const { authorId } = req.query;
+    const journals = await JournalModel.find({ author: authorId }).lean();
+    return res.status(200).json({ journals });
   } catch (e) {
     res.json({ message: e.message || "Something went wrong!" });
   }
 });
-app.get("/journals/:id", (req, res) => {
+app.get("/journals/:id", authMiddleware, async (req, res) => {
   try {
+    const { id } = req.params;
+    const journal = await JournalModel.findById(id).lean();
+    if (!journal) {
+      return res.status(404).json({ message: "Journal not found!" });
+    }
+    return res.status(200).json({ journal });
   } catch (e) {
     res.json({ message: e.message || "Something went wrong!" });
   }
 });
-app.put("/journals", (req, res) => {
+app.put("/journals", authMiddleware, async (req, res) => {
   try {
+    const { id, title, content } = req.body;
+    const journal = JournalModel.findByIdAndUpdate(
+      id,
+      { title, content },
+      { new: true }
+    ).lean();
+    if (!journal) {
+      return res.status(404).json({ message: "Journal not found!" });
+    }
+    return res.status(200).json({ journal });
   } catch (e) {
     res.json({ message: e.message || "Something went wrong!" });
   }
