@@ -56,8 +56,7 @@ function useSignUp() {
       username: string;
       password: string;
     }) => {
-        // TODO: connect with backend api
-      return fetch("/signup", {
+      return fetch("/api/signup", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,7 +86,7 @@ function useLogin() {
   return useMutation({
     mutationKey: ["login"],
     mutationFn: async (data: { usernameOrEmail: string; password: string }) => {
-      return fetch("/login", {
+      return fetch("/api/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -107,8 +106,16 @@ function useLogin() {
         }`
       );
     },
-    onSuccess: () => {
-      toast.success("Login successful!");
+    onSuccess: (res) => {
+        if (!res.ok) {
+            toast.error(
+              `Login error: ${
+                res.message || "Unknown error"
+              }`
+            );
+            return;
+        }
+        toast.success("Login successful!");
     },
   });
 }
@@ -397,7 +404,7 @@ function App() {
   }
 
   // TODO:
-  // Add auth (signup, login, logout)
+  // after register/login, show the main app
   const isLoggedIn = false;
   if (!isLoggedIn) {
     return <LoginRegisterScreen />;
