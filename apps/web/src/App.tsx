@@ -9,6 +9,7 @@ import { HiOutlinePencilAlt } from "react-icons/hi";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
+import { Eye, EyeOff } from "lucide-react";
 import { useDebounce } from "./common/hooks";
 
 type TNote = {
@@ -18,20 +19,33 @@ type TNote = {
 };
 
 const schema = {
-    register: z.object({
-        email: z.string().nonempty({ message: "Email is required" }).email({ message: "Invalid email address" }),
-        username: z.string().nonempty({ message: "Username is required" }).min(3, { message: "Username must be at least 3 characters" }),
-        password: z.string().nonempty({ message: "Password is required" }).min(6, { message: "Password must be at least 6 characters" }),
-        confirmPassword: z.string().nonempty({ message: "Password is required" }).min(6, { message: "Confirm Password must be at least 6 characters" }),
-    }),
-    login: z.object({
-        usernameOrEmail: z.string().nonempty({ message: "Username or Email is required" }),
-        password: z.string().nonempty({ message: "Password is required" }).min(6, { message: "Password must be at least 6 characters" }),
-    }), 
-}
-type TFormData = {
-  email: string;
-  password: string;
+  register: z.object({
+    email: z
+      .string()
+      .nonempty({ message: "Email is required" })
+      .email({ message: "Invalid email address" }),
+    username: z
+      .string()
+      .nonempty({ message: "Username is required" })
+      .min(3, { message: "Username must be at least 3 characters" }),
+    password: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Password must be at least 6 characters" }),
+    confirmPassword: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Confirm Password must be at least 6 characters" }),
+  }),
+  login: z.object({
+    usernameOrEmail: z
+      .string()
+      .nonempty({ message: "Username or Email is required" }),
+    password: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Password must be at least 6 characters" }),
+  }),
 };
 
 function useSignUp() {
@@ -42,6 +56,7 @@ function useSignUp() {
       username: string;
       password: string;
     }) => {
+        // TODO: connect with backend api
       return fetch("/signup", {
         method: "POST",
         headers: {
@@ -107,9 +122,29 @@ function TextFieldInput({
   type: string;
   helperText?: string;
 } & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false);
+  const [isInteracted, setIsInteracted] = useState(false);
+  let typeToUse = type;
+  if (type === "password") {
+    typeToUse = show ? "text" : "password";
+  }
   return (
-    <div className="flex flex-col mb-4">
-      <input type={type} className="input input-bordered w-64" {...props} />
+    <div className="flex flex-col mb-4 relative">
+      <input
+        type={typeToUse}
+        className="input input-bordered w-64"
+        {...props}
+        onFocus={() => setIsInteracted(true)}
+      />
+      {type === "password" && isInteracted? (
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-gray-600 cursor-pointer"
+        >
+          {show ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+      ) : null}
       {helperText ? (
         <span className="text-sm text-gray-500 mt-1">{helperText}</span>
       ) : null}
@@ -142,8 +177,11 @@ function RegisterScreen({
     confirmPassword: string;
   }) => {
     if (data.password !== data.confirmPassword) {
-        setError("confirmPassword", { type: "manual", message: "Passwords do not match" });
-    //   toast.error("Passwords do not match");
+      setError("confirmPassword", {
+        type: "manual",
+        message: "Passwords do not match",
+      });
+      //   toast.error("Passwords do not match");
       return;
     }
     if (signUpMutation.isPending) return;
@@ -267,8 +305,6 @@ function LoginScreen({
   );
 }
 
-// TODO: Move these to routes
-// TODO: Add eye button to show/hide password
 function LoginRegisterScreen() {
   const [isRegister, setIsRegister] = useState(false);
   if (isRegister) {
@@ -314,7 +350,7 @@ function App() {
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
-      debounce(saveNote);
+    debounce(saveNote);
   }, [debounce, note, saveNote]);
 
   useEffect(() => {
@@ -406,7 +442,7 @@ function App() {
             <div className="flex items-center">
               <p className="text-md text-gray-600">Journals</p>
               <button
-              type="button"
+                type="button"
                 onClick={handleCreateNewNote}
                 className="ml-2 btn btn-ghost border-0 rounded-md p-1.5 w-fit h-fit"
               >
