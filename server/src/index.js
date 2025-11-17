@@ -4,16 +4,25 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import bcryptjs from "bcryptjs";
 import jwt from "jsonwebtoken";
+import cors from "cors";
 
 dotenv.config();
 
 const app = express();
+app.use(cors({
+    origin: process.env.FRONTEND_URL,
+}));
 app.use(express.json());
 
 // models
 const userSchema = new mongoose.Schema(
   {
     email: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    username: {
       type: String,
       required: true,
       trim: true,
@@ -66,9 +75,9 @@ const emailRegExp = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const jwtExpiresIn = 1000 * 60 * 60;
 app.post("/signup", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email?.trim() || !password || !emailRegExp.test(email.trim())) {
-      throw new Error("Invalid email or password!");
+    const { email, username, password } = req.body;
+    if (!email?.trim() || !username?.trim() || !password || !emailRegExp.test(email.trim())) {
+      throw new Error("Invalid email, username or password!");
     }
     const userExists = await UserModel.exists({ email });
     if (userExists) {
@@ -77,6 +86,7 @@ app.post("/signup", async (req, res) => {
     const hashedPass = await bcryptjs.hash(password, 10);
     const user = await UserModel.create({
       email,
+      username,
       password: hashedPass,
     });
 
@@ -93,36 +103,35 @@ app.post("/signup", async (req, res) => {
       }
     );
 
-    return res.status(201).json({ token });
+    return res.status(201).json({ ok: true, token });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
 
 app.post("/login", async (req, res) => {
   try {
-    const { email, password } = req.body;
-    if (!email?.trim() || !password || !emailRegExp.test(email.trim())) {
-      throw new Error("Invalid email or password!");
+    const { usernameOrEmail, password } = req.body;
+    if (!usernameOrEmail?.trim() || !password || usernameOrEmail.includes("@") && !emailRegExp.test(usernameOrEmail.trim())) {
+      throw new Error("Invalid email, username or password!");
     }
-    const userInDb = await UserModel.findOne({ email }).lean();
-
+    const userInDb = await UserModel.findOne({ $or: [{ email: usernameOrEmail }, { username: usernameOrEmail }] }).lean();
     if (!userInDb) {
-      throw new Error("User with that email does not exists!");
+      throw new Error("User with that email or username does not exists!");
     }
     const isPassSame = await bcryptjs.compare(password, userInDb.password);
     if (!isPassSame) throw new Error("Email or password is invalid!");
     const token = jwt.sign(
-      { userId: userInDb._id, email },
+      { userId: userInDb._id, email: userInDb.email },
       process.env.JWT_SECRET,
       {
         expiresIn: jwtExpiresIn,
       }
     );
 
-    return res.status(200).json({ token });
+    return res.status(200).json({ ok: true, token });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
 
