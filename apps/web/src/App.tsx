@@ -1,7 +1,15 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
 import { toast } from "sonner";
 import { useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import axios, { type AxiosInstance } from "axios";
 import { v4 as uuidv4 } from "uuid";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
@@ -11,6 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
 import { Eye, EyeOff } from "lucide-react";
 import { useDebounce } from "./common/hooks";
+import { api, AuthContext } from "./main";
 
 type TNote = {
   value: string;
@@ -49,6 +58,8 @@ const schema = {
 };
 
 function useSignUp() {
+  const { setUser } = useContext(AuthContext);
+
   return useMutation({
     mutationKey: ["signup"],
     mutationFn: async (data: {
@@ -56,17 +67,11 @@ function useSignUp() {
       username: string;
       password: string;
     }) => {
-      return fetch("/api/signup", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      }).then((res) => {
-        if (!res.ok) {
-          throw new Error("Sign up failed");
+      return api.post("/signup", data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Signup failed");
         }
-        return res.json();
+        return res.data;
       });
     },
     onError: (error) => {
@@ -76,27 +81,31 @@ function useSignUp() {
         }`
       );
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      if (!res.ok) {
+        throw new Error("Sign up failed");
+      }
+      // set authorization headers
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${res.accessToken}`;
       toast.success("Sign up successful!");
+      setUser(res.user);
     },
   });
 }
 
 function useLogin() {
+  const { setUser } = useContext(AuthContext);
+
   return useMutation({
     mutationKey: ["login"],
     mutationFn: async (data: { usernameOrEmail: string; password: string }) => {
-      return fetch("/api/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(data),
-      }).then((res) => {
-        if (!res.ok) {
-          throw new Error("Login failed");
+      return api.post("/login", data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Login failed");
         }
-        return res.json();
+        return res.data;
       });
     },
     onError: (error) => {
@@ -107,15 +116,17 @@ function useLogin() {
       );
     },
     onSuccess: (res) => {
-        if (!res.ok) {
-            toast.error(
-              `Login error: ${
-                res.message || "Unknown error"
-              }`
-            );
-            return;
-        }
-        toast.success("Login successful!");
+        console.log('res: ', res)
+      if (!res.ok) {
+        toast.error(`Login error: ${res.message || "Unknown error"}`);
+        return;
+      }
+      toast.success("Login successful!");
+      // set authorization headers
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${res.accessToken}`;
+      setUser(res.user);
     },
   });
 }
@@ -143,7 +154,7 @@ function TextFieldInput({
         {...props}
         onFocus={() => setIsInteracted(true)}
       />
-      {type === "password" && isInteracted? (
+      {type === "password" && isInteracted ? (
         <button
           type="button"
           onClick={() => setShow(!show)}
@@ -404,8 +415,9 @@ function App() {
   }
 
   // TODO:
-  // after register/login, show the main app
-  const isLoggedIn = false;
+  // Test the auth flow.
+  const { user } = useContext(AuthContext);
+  const isLoggedIn = !!user;
   if (!isLoggedIn) {
     return <LoginRegisterScreen />;
   }

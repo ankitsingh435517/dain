@@ -3,6 +3,7 @@ lockfileVersion: 5.4
 specifiers:
   '@eslint/js': ^9.37.0
   bcryptjs: ^3.0.2
+  cookie-parser: ^1.4.7
   cors: ^2.8.5
   dotenv: ^17.2.3
   eslint: ^9.37.0
@@ -16,6 +17,7 @@ specifiers:
 
 dependencies:
   bcryptjs: 3.0.2
+  cookie-parser: 1.4.7
   cors: 2.8.5
   dotenv: 17.2.3
   express: 5.1.0
@@ -332,6 +334,18 @@ packages:
   /content-type/1.0.5:
     resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
     engines: {node: '>= 0.6'}
+    dev: false
+
+  /cookie-parser/1.4.7:
+    resolution: {integrity: sha512-nGUvgXnotP3BsjiLX2ypbQnWoGUPIIfHQNZkkC668ntrzGWEZVW70HDEB1qnNGMicPje6EttlIgzo51YSwNQGw==}
+    engines: {node: '>= 0.8.0'}
+    dependencies:
+      cookie: 0.7.2
+      cookie-signature: 1.0.6
+    dev: false
+
+  /cookie-signature/1.0.6:
+    resolution: {integrity: sha512-QADzlaHc8icV8I7vbaJXJwod9HWYp8uCqf1xa4OfNu1T7JVxQIrUgOWtHdNDtPiywmFbiS12VjotIXLrKM3orQ==}
     dev: false
 
   /cookie-signature/1.2.2:
