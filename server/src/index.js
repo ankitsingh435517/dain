@@ -1,4 +1,5 @@
 // TODO: Add routes for journal
+// TODO: Add cookie based auth flow
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -35,6 +36,35 @@ const userSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+const refreshTokenSchema = new mongoose.Schema(
+  {
+    token: {
+      type: String,
+      required: true,
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "users",
+      required: true,
+    },
+    expiresAt: {
+      type: Date,
+      required: true,
+    },
+    deviceInfo: {
+      deviceId: String,
+      deviceName: String,
+      deviceType: String,
+      ipAddress: String,
+      platform: String,
+      userAgent: String,
+      browser: String,
+      browserVersion: String,
+    },
+  },
+  { timestamps: true }
+);
+
 const journalSchema = new mongoose.Schema(
   {
     title: {
@@ -55,6 +85,7 @@ const journalSchema = new mongoose.Schema(
 );
 
 const UserModel = mongoose.model("user", userSchema, "users");
+const RefreshTokenModel = mongoose.model("refreshToken", refreshTokenSchema, "refreshTokens");
 const JournalModel = mongoose.model("journal", journalSchema, "journals");
 
 // mongoose connection
@@ -72,7 +103,33 @@ const PORT = process.env.PORT || 5500;
 app.get("/ping", (_, res) => res.json({ message: "pong" }));
 
 const emailRegExp = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
-const jwtExpiresIn = 1000 * 60 * 60;
+
+const jwtAccessExpiresIn = 1000 * 60 * 60;
+const jwtRefreshExpiresIn = 1000 * 60 * 60 * 24 * 7;
+const signJwtAccess = (user) => {
+  return jwt.sign(
+    {
+      userId: user._id,
+      email: user.email,
+    },
+    process.env.JWT_ACCESS_SECRET,
+    {
+      expiresIn: jwtAccessExpiresIn,
+    }
+  );
+};
+const signJwtRefresh = (user) => {
+  return jwt.sign(
+    {
+      userId: user._id,
+      email: user.email,
+    },
+    process.env.JWT_REFRESH_SECRET,
+    {
+      expiresIn: jwtRefreshExpiresIn,
+    }
+  );
+};
 app.post("/signup", async (req, res) => {
   try {
     const { email, username, password } = req.body;
@@ -91,19 +148,34 @@ app.post("/signup", async (req, res) => {
     });
 
     if (!user) throw new Error("Something went wrong while sign up!");
+    
+    // create refresh and access token here
+    const accessToken = signJwtAccess(user);
+    const refreshToken = signJwtRefresh(user);
 
-    const token = jwt.sign(
-      {
-        userId: user._id,
-        email: user.email,
-      },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: jwtExpiresIn,
-      }
-    );
+    // hash refresh token before saving in db
+    const hashedRefreshToken = await bcryptjs.hash(refreshToken, 10);
 
-    return res.status(201).json({ ok: true, token });
+    // delete existing refresh tokens for the user, highly unlikely during signup but just in case
+    await RefreshTokenModel.deleteMany({ user: user._id });
+
+    // persist refresh token in db
+    await RefreshTokenModel.create({
+      token: hashedRefreshToken,
+      user: user._id,
+      expiresAt: new Date(Date.now() + jwtRefreshExpiresIn),
+    });
+
+    // set refresh token in http only cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: jwtRefreshExpiresIn, // 7 days
+    });
+
+    return res.status(201).json({ ok: true, accessToken });
+
   } catch (e) {
     res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
@@ -121,13 +193,31 @@ app.post("/login", async (req, res) => {
     }
     const isPassSame = await bcryptjs.compare(password, userInDb.password);
     if (!isPassSame) throw new Error("Email or password is invalid!");
-    const token = jwt.sign(
-      { userId: userInDb._id, email: userInDb.email },
-      process.env.JWT_SECRET,
-      {
-        expiresIn: jwtExpiresIn,
-      }
-    );
+    
+    // create refresh and access token here
+    const token = signJwtAccess(userInDb);
+    const refreshToken = signJwtRefresh(userInDb);
+
+    // hash refresh token before saving in db
+    const hashedRefreshToken = await bcryptjs.hash(refreshToken, 10);
+
+    // delete existing refresh tokens for the user
+    await RefreshTokenModel.deleteMany({ user: userInDb._id });
+
+    // persist refresh token in db
+    await RefreshTokenModel.create({
+      token: hashedRefreshToken,
+      user: userInDb._id,
+      expiresAt: new Date(Date.now() + jwtRefreshExpiresIn),
+    });
+
+    // set refresh token in http only cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: jwtRefreshExpiresIn, // 7 days
+    });
 
     return res.status(200).json({ ok: true, token });
   } catch (e) {
