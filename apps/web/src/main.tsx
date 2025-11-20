@@ -15,7 +15,7 @@ const queryClient = new QueryClient();
 export function getDeviceId() {
   let id = localStorage.getItem("deviceId");
   if (!id) {
-    id = crypto.randomUUID();   // same ID forever unless user clears localStorage
+    id = crypto.randomUUID(); // same ID forever unless user clears localStorage
     localStorage.setItem("deviceId", id);
   }
   return id;
@@ -47,16 +47,14 @@ export function getDeviceInfo() {
 
   return {
     deviceId: getDeviceId(),
-    deviceName: navigator.userAgent,           // Browser doesn't expose human-readable device name
+    deviceName: navigator.userAgent, // Browser doesn't expose human-readable device name
     deviceType: /Mobile|Android|iPhone/.test(ua) ? "Mobile" : "Desktop",
-    platform,                                   // e.g. "Win32", "MacIntel", "Linux x86_64"
+    platform, // e.g. "Win32", "MacIntel", "Linux x86_64"
     userAgent: ua,
     browser: getBrowserName(),
     browserVersion: getBrowserVersion(),
   };
 }
-
-
 
 // intercepting 401 requests for refresh-token
 export const api = axios.create({
@@ -64,8 +62,8 @@ export const api = axios.create({
   withCredentials: true, // important: sends httpOnly refresh cookie
 }) as AxiosInstance & { _hasAuthInterceptor: boolean };
 
-api.interceptors.request.use(config => {
-  config.headers['x-device-info'] = JSON.stringify(getDeviceInfo());
+api.interceptors.request.use((config) => {
+  config.headers["x-device-info"] = JSON.stringify(getDeviceInfo());
   return config;
 });
 
@@ -141,6 +139,8 @@ function AuthProvider({ queryClient, children }) {
   useEffect(() => {
     setupInterceptors(queryClient);
 
+    // while app loads, try to refresh token to get user info
+    // while refreshing, app can show a loader
     queryClient
       .fetchQuery({
         queryKey: ["auth"],
@@ -149,7 +149,7 @@ function AuthProvider({ queryClient, children }) {
         refetchOnWindowFocus: false,
       })
       .then((data) => {
-        console.log('data: ', data)
+        console.log("data: ", data);
         api.defaults.headers.common[
           "Authorization"
         ] = `Bearer ${data.accessToken}`;

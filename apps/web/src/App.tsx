@@ -7,7 +7,7 @@ import {
   useContext,
 } from "react";
 import { toast } from "sonner";
-import { useMutation } from "@tanstack/react-query";
+import { useIsFetching, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import axios, { type AxiosInstance } from "axios";
 import { v4 as uuidv4 } from "uuid";
@@ -17,7 +17,7 @@ import { HiOutlinePencilAlt } from "react-icons/hi";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, LogOut } from "lucide-react";
 import { useDebounce } from "./common/hooks";
 import { api, AuthContext } from "./main";
 
@@ -85,6 +85,7 @@ function useSignUp() {
       if (!res.ok) {
         throw new Error("Sign up failed");
       }
+      console.log("res: ", res);
       // set authorization headers
       api.defaults.headers.common[
         "Authorization"
@@ -116,7 +117,7 @@ function useLogin() {
       );
     },
     onSuccess: (res) => {
-        console.log('res: ', res)
+      console.log("res: ", res);
       if (!res.ok) {
         toast.error(`Login error: ${res.message || "Unknown error"}`);
         return;
@@ -127,6 +128,39 @@ function useLogin() {
         "Authorization"
       ] = `Bearer ${res.accessToken}`;
       setUser(res.user);
+    },
+  });
+}
+
+function useLogout() {
+  const { setUser } = useContext(AuthContext);
+
+  return useMutation({
+    mutationKey: ["logout"],
+    mutationFn: async () => {
+      return api.post("/logout").then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Logout failed");
+        }
+        return res.data;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Logout error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: (res) => {
+      if (!res.ok) {
+        throw new Error("Logout failed");
+      }
+      // clear user from context
+      setUser(null);
+      // remove authorization header
+      delete api.defaults.headers.common["Authorization"];
+      toast.success("Logged out successfully");
     },
   });
 }
@@ -414,13 +448,27 @@ function App() {
     textareaRef.current?.focus();
   }
 
-  // TODO:
-  // Test the auth flow.
+  const logoutMutation = useLogout();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
   const { user } = useContext(AuthContext);
+
+  const isFetchingAuth = useIsFetching({ queryKey: ["auth"] });
+  if (isFetchingAuth) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
   const isLoggedIn = !!user;
   if (!isLoggedIn) {
     return <LoginRegisterScreen />;
   }
+  // TODO:
   // connect backend api to store and fetch journals
   // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for journal list in sidebar
   // move on to the next features of Dain
@@ -453,6 +501,15 @@ function App() {
               className="ml-2 btn btn-ghost border-0 rounded-md px-3"
             >
               <FiSidebar className="text-lg" />
+            </button>
+            <button
+              onClick={handleLogout}
+              className={cx(
+                "ml-1 btn btn-ghost border-0 rounded-md px-3 absolute left-0 bottom-0 mb-2"
+              )}
+            >
+              <LogOut className="text-lg" height={18} />
+              {isSidebarOpen ? <span className="mr-2">Logout</span> : null}
             </button>
           </div>
         </div>
