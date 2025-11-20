@@ -1,10 +1,25 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  createContext,
+  useContext,
+} from "react";
+import { toast } from "sonner";
+import { useIsFetching, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import axios, { type AxiosInstance } from "axios";
 import { v4 as uuidv4 } from "uuid";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
+import { Eye, EyeOff, LogOut } from "lucide-react";
 import { useDebounce } from "./common/hooks";
+import { api, AuthContext } from "./main";
 
 type TNote = {
   value: string;
@@ -12,64 +27,342 @@ type TNote = {
   date: Date;
 };
 
-function LoginRegisterScreen() {
-    const [isRegister, setIsRegister] = useState(false);
-    const handleSignUp = () => {
-      // TODO: Handle sign up logic here
-    };
-    const handleLogin = () => {
-      // TODO: Handle login logic here
+const schema = {
+  register: z.object({
+    email: z
+      .string()
+      .nonempty({ message: "Email is required" })
+      .email({ message: "Invalid email address" }),
+    username: z
+      .string()
+      .nonempty({ message: "Username is required" })
+      .min(3, { message: "Username must be at least 3 characters" }),
+    password: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Password must be at least 6 characters" }),
+    confirmPassword: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Confirm Password must be at least 6 characters" }),
+  }),
+  login: z.object({
+    usernameOrEmail: z
+      .string()
+      .nonempty({ message: "Username or Email is required" }),
+    password: z
+      .string()
+      .nonempty({ message: "Password is required" })
+      .min(6, { message: "Password must be at least 6 characters" }),
+  }),
+};
+
+function useSignUp() {
+  const { setUser } = useContext(AuthContext);
+
+  return useMutation({
+    mutationKey: ["signup"],
+    mutationFn: async (data: {
+      email: string;
+      username: string;
+      password: string;
+    }) => {
+      return api.post("/signup", data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Signup failed");
+        }
+        return res.data;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Sign up error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: (res) => {
+      if (!res.ok) {
+        throw new Error("Sign up failed");
+      }
+      console.log("res: ", res);
+      // set authorization headers
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${res.accessToken}`;
+      toast.success("Sign up successful!");
+      setUser(res.user);
+    },
+  });
+}
+
+function useLogin() {
+  const { setUser } = useContext(AuthContext);
+
+  return useMutation({
+    mutationKey: ["login"],
+    mutationFn: async (data: { usernameOrEmail: string; password: string }) => {
+      return api.post("/login", data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Login failed");
+        }
+        return res.data;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Login error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: (res) => {
+      console.log("res: ", res);
+      if (!res.ok) {
+        toast.error(`Login error: ${res.message || "Unknown error"}`);
+        return;
+      }
+      toast.success("Login successful!");
+      // set authorization headers
+      api.defaults.headers.common[
+        "Authorization"
+      ] = `Bearer ${res.accessToken}`;
+      setUser(res.user);
+    },
+  });
+}
+
+function useLogout() {
+  const { setUser } = useContext(AuthContext);
+
+  return useMutation({
+    mutationKey: ["logout"],
+    mutationFn: async () => {
+      return api.post("/logout").then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Logout failed");
+        }
+        return res.data;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Logout error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: (res) => {
+      if (!res.ok) {
+        throw new Error("Logout failed");
+      }
+      // clear user from context
+      setUser(null);
+      // remove authorization header
+      delete api.defaults.headers.common["Authorization"];
+      toast.success("Logged out successfully");
+    },
+  });
+}
+
+function TextFieldInput({
+  type,
+  helperText,
+  ...props
+}: {
+  placeholder: string;
+  type: string;
+  helperText?: string;
+} & React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false);
+  const [isInteracted, setIsInteracted] = useState(false);
+  let typeToUse = type;
+  if (type === "password") {
+    typeToUse = show ? "text" : "password";
+  }
+  return (
+    <div className="flex flex-col mb-4 relative">
+      <input
+        type={typeToUse}
+        className="input input-bordered w-64"
+        {...props}
+        onFocus={() => setIsInteracted(true)}
+      />
+      {type === "password" && isInteracted ? (
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-gray-600 cursor-pointer"
+        >
+          {show ? <EyeOff size={20} /> : <Eye size={20} />}
+        </button>
+      ) : null}
+      {helperText ? (
+        <span className="text-sm text-gray-500 mt-1">{helperText}</span>
+      ) : null}
+    </div>
+  );
+}
+
+function RegisterScreen({
+  handleToggleRegister,
+}: {
+  handleToggleRegister: () => void;
+}) {
+  const signUpMutation = useSignUp();
+
+  const { register, handleSubmit, formState, setError } = useForm({
+    mode: "onSubmit",
+    defaultValues: {
+      email: "",
+      username: "",
+      password: "",
+      confirmPassword: "",
+    },
+    resolver: zodResolver(schema.register),
+  });
+  const { errors } = formState;
+  const onSubmit = (data: {
+    email: string;
+    username: string;
+    password: string;
+    confirmPassword: string;
+  }) => {
+    if (data.password !== data.confirmPassword) {
+      setError("confirmPassword", {
+        type: "manual",
+        message: "Passwords do not match",
+      });
+      //   toast.error("Passwords do not match");
+      return;
     }
-    if (isRegister) {
-        return (
-            <div className="flex flex-col items-center justify-center h-screen">
-              <h2 className="text-3xl mb-6">Create an Account</h2>
-              <div className="mb-4 flex flex-col">
-                  <input
-                    type="text"
-                    placeholder="Email"
-                    className="input input-bordered w-64 mb-2"
-                  />
-                <input
-                  type="text"
-                  placeholder="Username"
-                  className="input input-bordered w-64 mb-2"
-                />
-                <input
-                  type="password"
-                  placeholder="Password"
-                  className="input input-bordered w-64 mb-2"
-                />
-                <input
-                  type="password"
-                  placeholder="Confirm Password"
-                  className="input input-bordered w-64"
-                />
-              </div>
-              <button className="btn btn-secondary btn-lg" onClick={handleSignUp}>Sign Up</button>
-              <h5 className="mt-4 flex items-center">Already have an account? <button className="btn btn-link text-blue-500" onClick={() => setIsRegister(false)}>Login</button></h5>
-            </div>
-          );
-    }
+    if (signUpMutation.isPending) return;
+    signUpMutation.mutate({
+      email: data.email,
+      username: data.username,
+      password: data.password,
+    });
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center h-screen">
+      <h2 className="text-3xl mb-6">Create an Account</h2>
+      <form onSubmit={handleSubmit(onSubmit)} className="text-center">
+        <div className="mb-4 flex flex-col">
+          <TextFieldInput
+            {...register("email", { required: "Email is required" })}
+            type="text"
+            placeholder="Email"
+            helperText={errors.email?.message}
+          />
+          <TextFieldInput
+            {...register("username", { required: "Username is required" })}
+            type="text"
+            placeholder="Username"
+            helperText={errors.username?.message}
+          />
+          <TextFieldInput
+            {...register("password", { required: "Password is required" })}
+            type="password"
+            placeholder="Password"
+            helperText={errors.password?.message}
+          />
+          <TextFieldInput
+            {...register("confirmPassword", {
+              required: "Confirm Password is required",
+            })}
+            type="password"
+            placeholder="Confirm Password"
+            helperText={errors.confirmPassword?.message}
+          />
+        </div>
+        <button className="btn btn-secondary btn-lg" type="submit">
+          Sign Up
+        </button>
+      </form>
+      <h5 className="mt-4 flex items-center">
+        Already have an account?{" "}
+        <button
+          type="button"
+          className="btn btn-link text-blue-500"
+          onClick={handleToggleRegister}
+        >
+          Login
+        </button>
+      </h5>
+    </div>
+  );
+}
+
+function LoginScreen({
+  handleToggleRegister,
+}: {
+  handleToggleRegister: () => void;
+}) {
+  const loginMutation = useLogin();
+
+  const { register, handleSubmit, formState } = useForm({
+    mode: "onSubmit",
+    defaultValues: {
+      usernameOrEmail: "",
+      password: "",
+    },
+    resolver: zodResolver(schema.login),
+  });
+  const { errors } = formState;
+
+  const onSubmit = (data: { usernameOrEmail: string; password: string }) => {
+    if (loginMutation.isPending) return;
+    loginMutation.mutate({
+      usernameOrEmail: data.usernameOrEmail,
+      password: data.password,
+    });
+  };
+
   return (
     <div className="flex flex-col items-center justify-center h-screen">
       <h2 className="text-3xl mb-6">Welcome to Dain</h2>
-      <div className="mb-4 flex flex-col">
-        <input
-          type="text"
-          placeholder="Username or Email"
-          className="input input-bordered w-64 mb-2"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          className="input input-bordered w-64"
-        />
-      </div>
-      <button className="btn btn-secondary btn-lg" onClick={handleLogin}>Login</button>
-      <h5 className="mt-4 flex items-center">Don't have an account? <button className="btn btn-link text-blue-500" onClick={() => setIsRegister(true)}>Sign up</button></h5>
+      <form onSubmit={handleSubmit(onSubmit)} className="text-center">
+        <div className="mb-4 flex flex-col">
+          <TextFieldInput
+            type="text"
+            {...register("usernameOrEmail", {
+              required: "Username or Email is required",
+            })}
+            placeholder="Username or Email"
+            helperText={errors.usernameOrEmail?.message}
+          />
+          <TextFieldInput
+            type="password"
+            {...register("password", { required: "Password is required" })}
+            placeholder="Password"
+            helperText={errors.password?.message}
+          />
+        </div>
+        <button className="btn btn-secondary btn-lg" type="submit">
+          Login
+        </button>
+      </form>
+      <h5 className="mt-4 flex items-center">
+        Don't have an account?{" "}
+        <button
+          type="button"
+          className="btn btn-link text-blue-500"
+          onClick={handleToggleRegister}
+        >
+          Sign up
+        </button>
+      </h5>
     </div>
   );
+}
+
+function LoginRegisterScreen() {
+  const [isRegister, setIsRegister] = useState(false);
+  if (isRegister) {
+    return <RegisterScreen handleToggleRegister={() => setIsRegister(false)} />;
+  }
+  return <LoginScreen handleToggleRegister={() => setIsRegister(true)} />;
 }
 
 function App() {
@@ -107,6 +400,7 @@ function App() {
     localStorage.setItem("savedNotes", JSON.stringify(notes));
   }, [notes]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
     debounce(saveNote);
   }, [debounce, note, saveNote]);
@@ -154,12 +448,27 @@ function App() {
     textareaRef.current?.focus();
   }
 
+  const logoutMutation = useLogout();
+
+  const handleLogout = () => {
+    logoutMutation.mutate();
+  };
+
+  const { user } = useContext(AuthContext);
+
+  const isFetchingAuth = useIsFetching({ queryKey: ["auth"] });
+  if (isFetchingAuth) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+  const isLoggedIn = !!user;
+  if (!isLoggedIn) {
+    return <LoginRegisterScreen />;
+  }
   // TODO:
-  // Add auth (signup, login, logout)
-    const isLoggedIn = false;
-    if (!isLoggedIn) {
-        return <LoginRegisterScreen />;
-    }
   // connect backend api to store and fetch journals
   // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for journal list in sidebar
   // move on to the next features of Dain
@@ -193,6 +502,15 @@ function App() {
             >
               <FiSidebar className="text-lg" />
             </button>
+            <button
+              onClick={handleLogout}
+              className={cx(
+                "ml-1 btn btn-ghost border-0 rounded-md px-3 absolute left-0 bottom-0 mb-2"
+              )}
+            >
+              <LogOut className="text-lg" height={18} />
+              {isSidebarOpen ? <span className="mr-2">Logout</span> : null}
+            </button>
           </div>
         </div>
         {isSidebarOpen ? (
@@ -200,6 +518,7 @@ function App() {
             <div className="flex items-center">
               <p className="text-md text-gray-600">Journals</p>
               <button
+                type="button"
                 onClick={handleCreateNewNote}
                 className="ml-2 btn btn-ghost border-0 rounded-md p-1.5 w-fit h-fit"
               >
