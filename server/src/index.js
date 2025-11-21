@@ -1,4 +1,3 @@
-// TODO: Add routes for journal
 import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
@@ -68,17 +67,17 @@ const refreshTokenSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-const journalSchema = new mongoose.Schema(
+const noteSchema = new mongoose.Schema(
   {
     title: {
       type: String,
       required: true,
       default: "Untitled",
     },
-    content: {
+    value: {
       type: String,
     },
-    author: {
+    user: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "users",
       required: true,
@@ -93,7 +92,7 @@ const RefreshTokenModel = mongoose.model(
   refreshTokenSchema,
   "refreshTokens"
 );
-const JournalModel = mongoose.model("journal", journalSchema, "journals");
+const NoteModel = mongoose.model("note", noteSchema, "notes");
 
 // mongoose connection
 try {
@@ -411,66 +410,100 @@ const authMiddleware = (req, res, next) => {
   try {
     const token = req.headers.authorization.split("Bearer ")[1];
     if (!token) throw new Error("Invalid token!");
-    jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET);
+    req.user = payload;
     next();
   } catch (_) {
     res.status(401).json({ message: "Unauthorized" });
   }
 };
 
-// journal routes
-app.post("/journals", authMiddleware, async (req, res) => {
+// notes routes
+app.post("/notes", authMiddleware, async (req, res) => {
   try {
-    const { title, content, authorId } = req.body;
-    const user = await UserModel.findById(authorId);
+    const { title, value } = req.body;
+    const { userId } = req.user;
+    const user = await UserModel.findById(userId);
     if (!user) {
-      throw new Error("Author not found!");
+      throw new Error("User not found!");
     }
-    const journal = await JournalModel.create({
+    const note = await NoteModel.create({
       title,
-      content,
-      author: user._id,
+      value,
+      user: user._id,
     });
-    return res.status(201).json({ journal });
+    return res.status(201).json({ ok: true, note });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
-app.get("/journals", authMiddleware, async (req, res) => {
+app.get("/notes", authMiddleware, async (req, res) => {
   try {
-    const { authorId } = req.query;
-    const journals = await JournalModel.find({ author: authorId }).lean();
-    return res.status(200).json({ journals });
+    const { userId } = req.user;
+    const notes = await NoteModel.find({ user: userId }).lean();
+    return res.status(200).json({ ok: true, notes });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
-app.get("/journals/:id", authMiddleware, async (req, res) => {
+app.get("/notes/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
-    const journal = await JournalModel.findById(id).lean();
-    if (!journal) {
-      return res.status(404).json({ message: "Journal not found!" });
+    const { userId } = req.user;
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found!");
     }
-    return res.status(200).json({ journal });
+    const note = await NoteModel.findOne({ _id: id, user: userId }).lean();
+    if (!note) {
+      return res.status(404).json({ ok: false, message: "Note not found!" });
+    }
+    return res.status(200).json({ ok: true, note });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
-app.put("/journals", authMiddleware, async (req, res) => {
+app.put("/notes/:id", authMiddleware, async (req, res) => {
   try {
-    const { id, title, content } = req.body;
-    const journal = JournalModel.findByIdAndUpdate(
-      id,
-      { title, content },
+    const { id } = req.params;
+    const { title, value } = req.body;
+    const { userId } = req.user;
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found!");
+    }
+    const note = await NoteModel.findOneAndUpdate(
+      { _id: id, user: userId },
+      { title, value },
       { new: true }
     ).lean();
-    if (!journal) {
-      return res.status(404).json({ message: "Journal not found!" });
+    if (!note) {
+      return res.status(404).json({ ok: false, message: "Note not found!" });
     }
-    return res.status(200).json({ journal });
+    return res.status(200).json({ ok: true, note });
   } catch (e) {
-    res.json({ message: e.message || "Something went wrong!" });
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
+  }
+});
+
+app.delete("/notes/:id", authMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found!");
+    }
+    console.log("Deleting note:", id, "for user:", userId);
+    const note = await NoteModel.findOneAndDelete(
+      { _id: id, user: userId }
+    ).lean();
+    if (!note) {
+      return res.status(404).json({ ok: false, message: "Note not found!" });
+    }
+    return res.status(200).json({ ok: true, message: "Note deleted successfully!" });
+  } catch (e) {
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
   }
 });
 

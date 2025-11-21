@@ -7,10 +7,15 @@ import {
   useContext,
 } from "react";
 import { toast } from "sonner";
-import { useIsFetching, useMutation } from "@tanstack/react-query";
+import {
+  useIsFetching,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import axios, { type AxiosInstance } from "axios";
-import { v4 as uuidv4 } from "uuid";
+import IconButton from "@mui/material/IconButton";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
@@ -20,10 +25,22 @@ import cx from "classnames";
 import { Eye, EyeOff, LogOut } from "lucide-react";
 import { useDebounce } from "./common/hooks";
 import { api, AuthContext } from "./main";
+import MenuItem from "@mui/material/MenuItem";
+import Menu from "@mui/material/Menu";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import Button from "@mui/material/Button";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+
+type TUnsavedNote = {
+  value: string;
+  date: Date;
+};
 
 type TNote = {
+  _id?: string;
   value: string;
-  id: string;
   date: Date;
 };
 
@@ -161,6 +178,102 @@ function useLogout() {
       // remove authorization header
       delete api.defaults.headers.common["Authorization"];
       toast.success("Logged out successfully");
+    },
+  });
+}
+
+function useFetchNotes() {
+  const { user } = useContext(AuthContext);
+
+  return useQuery({
+    queryKey: ["notes", user?.id],
+    queryFn: async () => {
+      return api.get("/notes").then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Fetch notes failed");
+        }
+        return res.data.notes;
+      });
+    },
+    enabled: !!user,
+  });
+}
+
+function useCreateNote(afterCreate?: (note: TNote) => void) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["createNote"],
+    mutationFn: async (data: { value: string; date: Date }) => {
+      return api.post("/notes", data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Create note failed");
+        }
+        return res.data.note;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Create note error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: (res) => {
+      if (afterCreate) {
+        afterCreate(res);
+      }
+      qc.invalidateQueries({ queryKey: ["notes"] });
+    },
+  });
+}
+
+function useUpdateNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["updateNote"],
+    mutationFn: async (data: { id: string; value: string; date: Date }) => {
+      return api.put(`/notes/${data.id}`, data).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Update note failed");
+        }
+        return res.data.note;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Update note error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notes"] });
+    },
+  });
+}
+
+function useDeleteNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: ["deleteNote"],
+    mutationFn: async (id: string) => {
+      return api.delete(`/notes/${id}`).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Delete note failed");
+        }
+        return res.data;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Delete note error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["notes"] });
+      toast.success("Note deleted successfully");
     },
   });
 }
@@ -366,57 +479,60 @@ function LoginRegisterScreen() {
 }
 
 function App() {
-  const [note, setNote] = useState<TNote>({
+  // TODO:
+  // This is not a simple feature, need to plan and design it properly for scale
+  //-----------
+  // connect backend api to store and fetch notes - done
+  // show fetched notes in the sidebar instead of localstorage ones -done
+  // allow creating new note that saves to backend - done
+  // allow updating note that updates to backend - done
+  // show selected note and preserve on refresh by using note id in the url
+  // allow deleting note that deletes from backend
+  // show loading state when fetching notes
+  // show empty state when no notes
+  // improve styling of sidebar and note list
+  //-----------
+  // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for note list in sidebar
+  // move on to the next features of Dain
+  
+  const { data: notes, isLoading: isFetchingNotes } = useFetchNotes();
+  const [note, setNote] = useState<TUnsavedNote>({
     value: "",
-    id: uuidv4(),
     date: new Date(),
   });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const savedNotes: TNote[] =
-    JSON.parse(localStorage.getItem("savedNotes") || "[]") || [];
-
-  const [notes, setNotes] = useState<TNote[]>(savedNotes);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const debounce = useDebounce();
 
+  const saveNoteMutation = useCreateNote((savedNote) => setNote(savedNote));
+  const updateNoteMutation = useUpdateNote();
+  const deleteNoteMutation = useDeleteNote();
+
   const saveNote = useCallback(() => {
-    const { id } = note;
-
-    const existingNote = notes.find((n) => n.id === id);
-    if (existingNote) {
-      // update old note
-      const updatedNote = { ...existingNote, value: note.value };
-      const updatedNotes = notes.map((n) => (n.id === id ? updatedNote : n));
-      setNotes(() => updatedNotes);
-    } else {
-      // new note
-      if (note.value) {
-        setNotes((prev) => [...prev, note]);
-      }
+    if (!note.value) return;
+    const { _id } = note as TNote;
+    if (_id) {
+        // if nothing changed, don't update
+        const existingNote = notes?.find((n) => n._id === _id);
+        if (existingNote?.value === note.value && existingNote?.date === note.date) {
+            return;
+        }
+      // its an update to existing note
+      updateNoteMutation.mutate({
+        id: _id,
+        value: note.value,
+        date: note.date,
+      });
+      return;
     }
-  }, [note, notes]);
-
-  useEffect(() => {
-    localStorage.setItem("savedNotes", JSON.stringify(notes));
-  }, [notes]);
+    // save note to backend
+    saveNoteMutation.mutate({ value: note.value, date: note.date });
+  }, [note, saveNoteMutation.mutate, updateNoteMutation.mutate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
     debounce(saveNote);
   }, [debounce, note, saveNote]);
-
-  useEffect(() => {
-    function handleSaveShortcut(e: WindowEventMap["keydown"]) {
-      // For Windows/Linux: Ctrl+S
-      // For Mac: ⌘+S
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
-        e.preventDefault();
-        saveNote();
-      }
-    }
-    window.addEventListener("keydown", handleSaveShortcut);
-    return () => window.removeEventListener("keydown", handleSaveShortcut);
-  }, [saveNote]);
 
   function handleSideBarLeftClick() {
     setIsSidebarOpen((prev) => !prev);
@@ -426,26 +542,51 @@ function App() {
     e: React.MouseEvent<HTMLDivElement, MouseEvent>,
     n: TNote
   ) {
-    if (e) e.preventDefault();
+    if (e) e.stopPropagation();
 
-    if (!n.id) return;
+    if (!n._id) return;
 
     setNote(() => n);
     textareaRef.current?.focus();
   }
 
-  function handleCreateNewNote() {
+  function handleCreateNewUnsavedNote() {
     if (!note.value) return;
     // save current unsaved
     saveNote();
     // create a new empty note and add it in the state but don't save it yet
     const newNote = {
       value: "",
-      id: uuidv4(),
       date: new Date(),
     };
     setNote(() => newNote);
     textareaRef.current?.focus();
+  }
+
+  const [menu, setMenu] = useState<null | HTMLElement>(null);
+  const [deleteNoteId, setDeleteNoteId] = useState<null | string>(null);
+
+  function handleShowSavedNoteOptions(e) {
+    if (e) e.stopPropagation();
+    setMenu(e.currentTarget);
+  }
+
+  function handleOpenDeleteSelectedNote(e, noteId: string) {
+    if (e) e.stopPropagation();
+    setDeleteNoteId(noteId);
+  }
+
+  function handleDeleteSelectedNote() {
+    // FIXME: currently deleting note is not working properly, it selects the last note when a note is deleted
+    if (!deleteNoteId) return;
+    // mutation to delete note
+    // deleteNoteMutation.mutate(deleteNoteId);
+    // close dialog
+    // setDeleteNoteId(null);
+    // if the deleted note is currently opened, clear the editor
+    // if ((note as TNote)._id === deleteNoteId) {
+    //   setNote({ value: "", date: new Date() });
+    // }
   }
 
   const logoutMutation = useLogout();
@@ -456,6 +597,7 @@ function App() {
 
   const { user } = useContext(AuthContext);
 
+  // jsx
   const isFetchingAuth = useIsFetching({ queryKey: ["auth"] });
   if (isFetchingAuth) {
     return (
@@ -468,11 +610,6 @@ function App() {
   if (!isLoggedIn) {
     return <LoginRegisterScreen />;
   }
-  // TODO:
-  // connect backend api to store and fetch journals
-  // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for journal list in sidebar
-  // move on to the next features of Dain
-
   return (
     <div className="flex">
       <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "min-w-[2%]")}>
@@ -519,7 +656,7 @@ function App() {
               <p className="text-md text-gray-600">Journals</p>
               <button
                 type="button"
-                onClick={handleCreateNewNote}
+                onClick={handleCreateNewUnsavedNote}
                 className="ml-2 btn btn-ghost border-0 rounded-md p-1.5 w-fit h-fit"
               >
                 <HiOutlinePencilAlt />
@@ -539,6 +676,33 @@ function App() {
                     {n.value.slice(0, 25) +
                       (n.value.length > 25 ? "..." : "") || "Empty Journal"}
                   </p>
+                  {/* More icon */}
+                  <IconButton onClick={handleShowSavedNoteOptions}>
+                    <MoreVertIcon />
+                  </IconButton>
+
+                  {/* Menu list */}
+                  <Menu id="saved-notes-menu" anchorEl={menu} open={Boolean(menu)} onClose={() => setMenu(null)}>
+                    <MenuItem onClick={(e) => handleOpenDeleteSelectedNote(e, n._id)}>
+                        Delete Note
+                    </MenuItem>
+                  </Menu>
+
+                  {/* Delete Dialog */}
+                  <Dialog open={deleteNoteId === n._id} onClose={() => setDeleteNoteId(null)}>
+                        <DialogTitle>Delete Note</DialogTitle>
+                        <DialogContent>
+                          Are you sure you want to delete this note? This action cannot be undone.
+                        </DialogContent>
+                        <DialogActions>
+                          <Button onClick={() => setDeleteNoteId(null)}>Cancel</Button>
+                          <Button
+                            onClick={handleDeleteSelectedNote}
+                          >
+                            Delete
+                          </Button>
+                        </DialogActions>
+                  </Dialog>
                 </div>
               ))}
             </div>
