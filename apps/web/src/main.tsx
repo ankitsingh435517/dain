@@ -58,7 +58,7 @@ export function getDeviceInfo() {
 
 // intercepting 401 requests for refresh-token
 export const api = axios.create({
-  baseURL: "/api",
+  baseURL: import.meta.env.VITE_API_URL,
   withCredentials: true, // important: sends httpOnly refresh cookie
 }) as AxiosInstance & { _hasAuthInterceptor: boolean };
 
