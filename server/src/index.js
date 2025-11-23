@@ -10,14 +10,20 @@ dotenv.config();
 
 const app = express();
 app.use(cookieParser());
-const allowedOrigins = [process.env.FRONTEND_URL];
+
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+console.log("Allowed origins:", allowedOrigins);
+
 app.use(
- cors({
+  cors({
     origin: allowedOrigins,
     credentials: true,
   })
 );
-app.options("*", cors({ origin: allowedOrigins, credentials: true }));
+
 app.use(express.json());
 
 // models
