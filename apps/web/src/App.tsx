@@ -19,7 +19,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
-import { z } from "zod";
+import { set, z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
 import { Eye, EyeOff, LogOut } from "lucide-react";
@@ -479,22 +479,6 @@ function LoginRegisterScreen() {
 }
 
 function App() {
-  // TODO:
-  // This is not a simple feature, need to plan and design it properly for scale
-  //-----------
-  // connect backend api to store and fetch notes - done
-  // show fetched notes in the sidebar instead of localstorage ones -done
-  // allow creating new note that saves to backend - done
-  // allow updating note that updates to backend - done
-  // show selected note and preserve on refresh by using note id in the url
-  // allow deleting note that deletes from backend
-  // show loading state when fetching notes
-  // show empty state when no notes
-  // improve styling of sidebar and note list
-  //-----------
-  // use Lists and ListItem (secondaryAction prop give more icon to be added) - use it for note list in sidebar
-  // move on to the next features of Dain
-  
   const { data: notes, isLoading: isFetchingNotes } = useFetchNotes();
   const [note, setNote] = useState<TUnsavedNote>({
     value: "",
@@ -504,7 +488,13 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const debounce = useDebounce();
 
-  const saveNoteMutation = useCreateNote((savedNote) => setNote(savedNote));
+  const saveNoteMutation = useCreateNote((savedNote) => {
+    setNote(savedNote);
+    // update url to include note id
+    const url = new URL(window.location.href);
+    url.searchParams.set("noteId", savedNote._id!);
+    window.history.pushState({}, "", url.toString());
+  });
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
 
@@ -512,11 +502,14 @@ function App() {
     if (!note.value) return;
     const { _id } = note as TNote;
     if (_id) {
-        // if nothing changed, don't update
-        const existingNote = notes?.find((n) => n._id === _id);
-        if (existingNote?.value === note.value && existingNote?.date === note.date) {
-            return;
-        }
+      // if nothing changed, don't update
+      const existingNote = notes?.find((n) => n._id === _id);
+      if (
+        existingNote?.value === note.value &&
+        existingNote?.date === note.date
+      ) {
+        return;
+      }
       // its an update to existing note
       updateNoteMutation.mutate({
         id: _id,
@@ -528,6 +521,21 @@ function App() {
     // save note to backend
     saveNoteMutation.mutate({ value: note.value, date: note.date });
   }, [note, saveNoteMutation.mutate, updateNoteMutation.mutate]);
+
+  useEffect(() => {
+    if (!notes?.length) return;
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const noteId = urlParams.get("noteId");
+
+    if (!noteId) return;
+
+    const noteToOpen = notes.find((n) => n._id === noteId);
+
+    if (!noteToOpen) return;
+
+    setNote(noteToOpen);
+  }, [notes]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
   useEffect(() => {
@@ -548,6 +556,10 @@ function App() {
 
     setNote(() => n);
     textareaRef.current?.focus();
+    // update url to include note id
+    const url = new URL(window.location.href);
+    url.searchParams.set("noteId", n._id);
+    window.history.pushState({}, "", url.toString());
   }
 
   function handleCreateNewUnsavedNote() {
@@ -561,32 +573,43 @@ function App() {
     };
     setNote(() => newNote);
     textareaRef.current?.focus();
+    // remove noteId from url
+    const url = new URL(window.location.href);
+    url.searchParams.delete("noteId");
+    window.history.pushState({}, "", url.toString());
   }
 
   const [menu, setMenu] = useState<null | HTMLElement>(null);
-  const [deleteNoteId, setDeleteNoteId] = useState<null | string>(null);
+  const [selectedNote, setSelectedNote] = useState<null | string>(null);
+  const [deleteNote, setDeleteNote] = useState<null | boolean>(null);
 
-  function handleShowSavedNoteOptions(e) {
-    if (e) e.stopPropagation();
+  function handleShowSavedNoteOptions(e, noteId: string) {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     setMenu(e.currentTarget);
+    setSelectedNote(noteId);
   }
 
-  function handleOpenDeleteSelectedNote(e, noteId: string) {
-    if (e) e.stopPropagation();
-    setDeleteNoteId(noteId);
+  function handleOpenDeleteSelectedNote(e) {
+    e.stopPropagation();
+    e.preventDefault();
+    setDeleteNote(true);
   }
 
-  function handleDeleteSelectedNote() {
-    // FIXME: currently deleting note is not working properly, it selects the last note when a note is deleted
-    if (!deleteNoteId) return;
+  function handleDeleteSelectedNote(e) {
+    e.stopPropagation();
+    if (!selectedNote) return;
     // mutation to delete note
-    // deleteNoteMutation.mutate(deleteNoteId);
+    deleteNoteMutation.mutate(selectedNote);
     // close dialog
-    // setDeleteNoteId(null);
+    setDeleteNote(null);
+    setMenu(null);
     // if the deleted note is currently opened, clear the editor
-    // if ((note as TNote)._id === deleteNoteId) {
-    //   setNote({ value: "", date: new Date() });
-    // }
+    if ((note as TNote)._id === selectedNote) {
+      setNote({ value: "", date: new Date() });
+    }
   }
 
   const logoutMutation = useLogout();
@@ -662,47 +685,35 @@ function App() {
                 <HiOutlinePencilAlt />
               </button>
             </div>
-            <div className="mt-4 mr-2 flex flex-col items-start ">
+            <div className="mt-4 mr-2 flex flex-col items-start">
+              {isFetchingNotes && <p>Loading notes...</p>}
               {notes.map((n) => (
                 <div
                   key={n.id}
                   className={cx(
                     " p-2 btn btn-ghost flex items-center justify-start rounded-md w-full",
-                    note.id === n.id ? "btn-active" : ""
+                    note._id === n._id ? "btn-active" : ""
                   )}
                   onClick={(e) => handleSelectNote(e, n)}
                 >
-                  <p className="text-left font-medium">
+                  <p className="text-left font-medium w-[90%]">
                     {n.value.slice(0, 25) +
                       (n.value.length > 25 ? "..." : "") || "Empty Journal"}
                   </p>
                   {/* More icon */}
-                  <IconButton onClick={handleShowSavedNoteOptions}>
-                    <MoreVertIcon />
-                  </IconButton>
-
-                  {/* Menu list */}
-                  <Menu id="saved-notes-menu" anchorEl={menu} open={Boolean(menu)} onClose={() => setMenu(null)}>
-                    <MenuItem onClick={(e) => handleOpenDeleteSelectedNote(e, n._id)}>
-                        Delete Note
-                    </MenuItem>
-                  </Menu>
-
-                  {/* Delete Dialog */}
-                  <Dialog open={deleteNoteId === n._id} onClose={() => setDeleteNoteId(null)}>
-                        <DialogTitle>Delete Note</DialogTitle>
-                        <DialogContent>
-                          Are you sure you want to delete this note? This action cannot be undone.
-                        </DialogContent>
-                        <DialogActions>
-                          <Button onClick={() => setDeleteNoteId(null)}>Cancel</Button>
-                          <Button
-                            onClick={handleDeleteSelectedNote}
-                          >
-                            Delete
-                          </Button>
-                        </DialogActions>
-                  </Dialog>
+                  <div className="">
+                    <IconButton
+                      onClick={(e) => {
+                        handleShowSavedNoteOptions(e, n._id);
+                      }}
+                      className={cx(
+                        "p-1 opacity-0 hover:opacity-100 transition-opacity",
+                        selectedNote === n._id && "opacity-100"
+                      )}
+                    >
+                      <MoreVertIcon />
+                    </IconButton>
+                  </div>
                 </div>
               ))}
             </div>
@@ -725,6 +736,48 @@ function App() {
           ></textarea>
         </div>
       </div>
+
+      {/* Menu list */}
+      <Menu
+        id="saved-notes-menu"
+        anchorEl={menu}
+        open={Boolean(menu)}
+        onClose={(e) => {
+          e.stopPropagation();
+          setMenu(null);
+        }}
+      >
+        <MenuItem onClick={(e) => handleOpenDeleteSelectedNote(e)}>
+          Delete Note
+        </MenuItem>
+      </Menu>
+
+      {/* Delete Dialog */}
+      <Dialog
+        open={!!deleteNote}
+        onClose={(e) => {
+          e.stopPropagation();
+          setDeleteNote(null);
+        }}
+        hideBackdrop
+      >
+        <DialogTitle>Delete Note</DialogTitle>
+        <DialogContent>
+          Are you sure you want to delete this note? This action cannot be
+          undone.
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              setDeleteNote(null);
+            }}
+          >
+            Cancel
+          </Button>
+          <Button onClick={handleDeleteSelectedNote}>Delete</Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 }
