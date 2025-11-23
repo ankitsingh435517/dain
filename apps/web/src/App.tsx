@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useState,
-  useCallback,
-  useRef,
-  createContext,
-  useContext,
-} from "react";
+import { useEffect, useState, useCallback, useRef, useContext } from "react";
 import { toast } from "sonner";
 import {
   useIsFetching,
@@ -19,7 +12,7 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
-import { set, z } from "zod";
+import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
 import { Eye, EyeOff, LogOut } from "lucide-react";
@@ -32,8 +25,10 @@ import DialogTitle from "@mui/material/DialogTitle";
 import Button from "@mui/material/Button";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
+import { Box } from "@mui/material";
 
 type TUnsavedNote = {
+  _id?: string;
   value: string;
   date: Date;
 };
@@ -75,7 +70,7 @@ const schema = {
 };
 
 function useSignUp() {
-  const { setUser } = useContext(AuthContext);
+  const { handleSaveUser } = useContext(AuthContext);
 
   return useMutation({
     mutationKey: ["signup"],
@@ -108,13 +103,13 @@ function useSignUp() {
         "Authorization"
       ] = `Bearer ${res.accessToken}`;
       toast.success("Sign up successful!");
-      setUser(res.user);
+      handleSaveUser(res.user);
     },
   });
 }
 
 function useLogin() {
-  const { setUser } = useContext(AuthContext);
+  const { handleSaveUser } = useContext(AuthContext);
 
   return useMutation({
     mutationKey: ["login"],
@@ -144,13 +139,13 @@ function useLogin() {
       api.defaults.headers.common[
         "Authorization"
       ] = `Bearer ${res.accessToken}`;
-      setUser(res.user);
+      handleSaveUser(res.user);
     },
   });
 }
 
 function useLogout() {
-  const { setUser } = useContext(AuthContext);
+  const { handleSaveUser } = useContext(AuthContext);
 
   return useMutation({
     mutationKey: ["logout"],
@@ -174,7 +169,7 @@ function useLogout() {
         throw new Error("Logout failed");
       }
       // clear user from context
-      setUser(null);
+      handleSaveUser(null);
       // remove authorization header
       delete api.defaults.headers.common["Authorization"];
       toast.success("Logged out successfully");
@@ -186,7 +181,7 @@ function useFetchNotes() {
   const { user } = useContext(AuthContext);
 
   return useQuery({
-    queryKey: ["notes", user?.id],
+    queryKey: ["notes", user?._id],
     queryFn: async () => {
       return api.get("/notes").then((res) => {
         if (!res.data.ok) {
@@ -481,6 +476,7 @@ function LoginRegisterScreen() {
 function App() {
   const { data: notes, isLoading: isFetchingNotes } = useFetchNotes();
   const [note, setNote] = useState<TUnsavedNote>({
+    _id: "",
     value: "",
     date: new Date(),
   });
@@ -503,7 +499,7 @@ function App() {
     const { _id } = note as TNote;
     if (_id) {
       // if nothing changed, don't update
-      const existingNote = notes?.find((n) => n._id === _id);
+      const existingNote = notes?.find((n: TNote) => n._id === _id);
       if (
         existingNote?.value === note.value &&
         existingNote?.date === note.date
@@ -520,7 +516,7 @@ function App() {
     }
     // save note to backend
     saveNoteMutation.mutate({ value: note.value, date: note.date });
-  }, [note, saveNoteMutation.mutate, updateNoteMutation.mutate]);
+  }, [note, saveNoteMutation.mutate, updateNoteMutation.mutate, notes?.find]);
 
   useEffect(() => {
     if (!notes?.length) return;
@@ -530,7 +526,7 @@ function App() {
 
     if (!noteId) return;
 
-    const noteToOpen = notes.find((n) => n._id === noteId);
+    const noteToOpen = notes.find((n: TNote) => n._id === noteId);
 
     if (!noteToOpen) return;
 
@@ -583,22 +579,30 @@ function App() {
   const [selectedNote, setSelectedNote] = useState<null | string>(null);
   const [deleteNote, setDeleteNote] = useState<null | boolean>(null);
 
-  function handleShowSavedNoteOptions(e, noteId: string) {
+  function handleShowSavedNoteOptions(
+    e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
+    noteId?: string
+  ) {
     if (e) {
       e.stopPropagation();
       e.preventDefault();
     }
     setMenu(e.currentTarget);
+    if (!noteId) return;
     setSelectedNote(noteId);
   }
 
-  function handleOpenDeleteSelectedNote(e) {
+  function handleOpenDeleteSelectedNote(
+    e: React.MouseEvent<HTMLElement, MouseEvent>
+  ) {
     e.stopPropagation();
     e.preventDefault();
     setDeleteNote(true);
   }
 
-  function handleDeleteSelectedNote(e) {
+  function handleDeleteSelectedNote(
+    e: React.MouseEvent<HTMLButtonElement, MouseEvent>
+  ) {
     e.stopPropagation();
     if (!selectedNote) return;
     // mutation to delete note
@@ -657,12 +661,14 @@ function App() {
             className={cx("w-full", isSidebarOpen ? "text-end" : "text-center")}
           >
             <button
+              type="button"
               onClick={handleSideBarLeftClick}
               className="ml-2 btn btn-ghost border-0 rounded-md px-3"
             >
               <FiSidebar className="text-lg" />
             </button>
             <button
+              type="button"
               onClick={handleLogout}
               className={cx(
                 "ml-1 btn btn-ghost border-0 rounded-md px-3 absolute left-0 bottom-0 mb-2"
@@ -687,12 +693,12 @@ function App() {
             </div>
             <div className="mt-4 mr-2 flex flex-col items-start">
               {isFetchingNotes && <p>Loading notes...</p>}
-              {notes.map((n) => (
-                <div
-                  key={n.id}
+              {notes.map((n: TNote) => (
+                <Box
+                  key={n._id}
                   className={cx(
                     " p-2 btn btn-ghost flex items-center justify-start rounded-md w-full",
-                    note._id === n._id ? "btn-active" : ""
+                    note?._id === n?._id ? "btn-active" : ""
                   )}
                   onClick={(e) => handleSelectNote(e, n)}
                 >
@@ -704,7 +710,7 @@ function App() {
                   <div className="">
                     <IconButton
                       onClick={(e) => {
-                        handleShowSavedNoteOptions(e, n._id);
+                        handleShowSavedNoteOptions(e, n?._id);
                       }}
                       className={cx(
                         "p-1 opacity-0 hover:opacity-100 transition-opacity",
@@ -714,7 +720,7 @@ function App() {
                       <MoreVertIcon />
                     </IconButton>
                   </div>
-                </div>
+                </Box>
               ))}
             </div>
           </div>
@@ -730,6 +736,7 @@ function App() {
               setNote((prev) => ({ ...prev, value: e.target.value }));
             }}
             spellCheck={false}
+            // biome-ignore lint/a11y/noAutofocus: <explanation>
             autoFocus
             className="textarea textarea-ghost text-2xl w-full h-screen focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
             placeholder="Type your thoughts out & let your brain breathe..."
@@ -739,10 +746,9 @@ function App() {
 
       {/* Menu list */}
       <Menu
-        id="saved-notes-menu"
         anchorEl={menu}
         open={Boolean(menu)}
-        onClose={(e) => {
+        onClose={(e: React.MouseEvent<HTMLElement, MouseEvent>) => {
           e.stopPropagation();
           setMenu(null);
         }}
@@ -755,7 +761,7 @@ function App() {
       {/* Delete Dialog */}
       <Dialog
         open={!!deleteNote}
-        onClose={(e) => {
+        onClose={(e: React.MouseEvent<HTMLElement, MouseEvent>) => {
           e.stopPropagation();
           setDeleteNote(null);
         }}

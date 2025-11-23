@@ -2,9 +2,20 @@ import "@fontsource/roboto/300.css";
 import "@fontsource/roboto/400.css";
 import "@fontsource/roboto/500.css";
 import "@fontsource/roboto/700.css";
-import { createContext, StrictMode, useEffect, useState } from "react";
+import {
+  createContext,
+  StrictMode,
+  useEffect,
+  useState,
+  type Dispatch,
+  type SetStateAction,
+} from "react";
 import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  type QueryFilters,
+} from "@tanstack/react-query";
 import "./index.css";
 import App from "./App.tsx";
 import { Toaster } from "sonner";
@@ -67,17 +78,28 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export const AuthContext = createContext({});
+export type User = {
+  _id: string;
+  email: string;
+  name: string;
+};
+export const AuthContext = createContext({
+  user: null,
+  handleSaveUser: () => {},
+} as {
+  user: User | null;
+  handleSaveUser: (userData: User | null) => void;
+});
 
 // Module-scope shared promise to avoid concurrent refreshes
-let refreshPromise = null;
+let refreshPromise: Promise<any> | null = null;
 
 function refreshRequest() {
   return api.post("/refresh-token").then((r) => r.data);
 }
 
 // setup interceptor
-function setupInterceptors(queryClient) {
+function setupInterceptors(queryClient: QueryClient) {
   // ensure we only add interceptor once
   if (api._hasAuthInterceptor) return;
   api._hasAuthInterceptor = true;
@@ -95,11 +117,12 @@ function setupInterceptors(queryClient) {
         try {
           if (!refreshPromise) {
             refreshPromise = queryClient
-              .fetchQuery(
-                ["auth", "refresh"],
-                refreshRequest,
-                { retry: false, staleTime: 0 } // do not retry or keep stale long
-              )
+              .fetchQuery({
+                queryKey: ["auth", "refresh"],
+                queryFn: () => refreshRequest(),
+                retry: false,
+                staleTime: 0, // do not retry or keep stale long
+              })
               .then((data) => {
                 refreshPromise = null;
                 return data;
@@ -124,7 +147,7 @@ function setupInterceptors(queryClient) {
           return api(original); // retry original request
         } catch (e) {
           // refresh failed -> clear cached auth and let caller handle (redirect to login)
-          queryClient.removeQueries(["auth"]);
+          queryClient.removeQueries(["auth"] as QueryFilters);
           return Promise.reject(e);
         }
       }
@@ -133,9 +156,18 @@ function setupInterceptors(queryClient) {
   );
 }
 
-function AuthProvider({ queryClient, children }) {
+function AuthProvider({
+  queryClient,
+  children,
+}: {
+  queryClient: QueryClient;
+  children: React.ReactNode;
+}) {
   // queryClient is passed from top-level react-query QueryClientProvider
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState<User | null>(null);
+  const handleSaveUser = (userData: User | null) => {
+    setUser(userData);
+  };
   useEffect(() => {
     setupInterceptors(queryClient);
 
@@ -146,7 +178,6 @@ function AuthProvider({ queryClient, children }) {
         queryKey: ["auth"],
         queryFn: () => refreshRequest(),
         retry: false,
-        refetchOnWindowFocus: false,
       })
       .then((data) => {
         console.log("data: ", data);
@@ -161,7 +192,7 @@ function AuthProvider({ queryClient, children }) {
   }, [queryClient]);
 
   return (
-    <AuthContext.Provider value={{ user, setUser }}>
+    <AuthContext.Provider value={{ user, handleSaveUser }}>
       {children}
     </AuthContext.Provider>
   );
