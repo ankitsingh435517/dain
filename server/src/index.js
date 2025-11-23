@@ -494,7 +494,6 @@ app.delete("/notes/:id", authMiddleware, async (req, res) => {
     if (!user) {
       throw new Error("User not found!");
     }
-    console.log("Deleting note:", id, "for user:", userId);
     const note = await NoteModel.findOneAndDelete(
       { _id: id, user: userId }
     ).lean();
