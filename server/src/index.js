@@ -252,11 +252,13 @@ app.post("/login", async (req, res) => {
       deviceInfo: deviceInfo,
     });
 
+    const isProduction = process.env.NODE_ENV === "production";
+
     // set refresh token in http only cookie
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      secure: isProduction,
+      sameSite: isProduction ? "none" : "lax",
       maxAge: jwtRefreshExpiresIn, // 7 days
     });
 
