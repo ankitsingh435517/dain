@@ -242,7 +242,8 @@ function useUpdateNote() {
       );
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["notes"] });
+      // FIXME: Temp fix, need to move each note to a separate query to avoid refetching all notes and the update must trigger in a more performant way when apropriate
+      //   qc.invalidateQueries({ queryKey: ["notes"] });
     },
   });
 }
