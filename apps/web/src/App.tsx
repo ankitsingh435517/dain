@@ -223,7 +223,6 @@ function useCreateNote(afterCreate?: (note: TNote) => void) {
 }
 
 function useUpdateNote() {
-  const qc = useQueryClient();
   return useMutation({
     mutationKey: ["updateNote"],
     mutationFn: async (data: { id: string; value: string; date: Date }) => {
