@@ -6,8 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js",
-    "build": "vite build"
+    "start": "node src/index.js"
   },
   "author": "Ankit Singh <ankitsingh435517@gmail.com>",
   "license": "ISC",
