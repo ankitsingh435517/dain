@@ -74,7 +74,7 @@ api.interceptors.request.use((config) => {
 export type User = {
   _id: string;
   email: string;
-  name: string;
+  username: string;
 };
 export const AuthContext = createContext({
   user: null,

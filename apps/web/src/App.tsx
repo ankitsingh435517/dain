@@ -13,10 +13,10 @@ import "./App.css";
 import { FiSidebar } from "react-icons/fi";
 import { HiOutlinePencilAlt } from "react-icons/hi";
 import { z } from "zod";
+import { v4 } from "uuid";
 import { zodResolver } from "@hookform/resolvers/zod";
 import cx from "classnames";
 import { Eye, EyeOff, LogOut } from "lucide-react";
-import { useDebounce } from "./common/hooks";
 import { api, AuthContext } from "./main";
 import MenuItem from "@mui/material/MenuItem";
 import Menu from "@mui/material/Menu";
@@ -26,17 +26,23 @@ import Button from "@mui/material/Button";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import { Box } from "@mui/material";
+import dayjs from "dayjs";
+import localizedFormat from "dayjs/plugin/localizedFormat";
+dayjs.extend(localizedFormat);
 
 type TUnsavedNote = {
-  _id?: string;
+  id: string;
   value: string;
-  date: Date;
+  updatedAt?: Date;
+  title: string;
 };
 
 type TNote = {
-  _id?: string;
+  id: string;
+  title: string;
+  createdAt?: Date;
+  updatedAt?: Date;
   value: string;
-  date: Date;
 };
 
 const schema = {
@@ -97,7 +103,6 @@ function useSignUp() {
       if (!res.ok) {
         throw new Error("Sign up failed");
       }
-      console.log("res: ", res);
       // set authorization headers
       api.defaults.headers.common[
         "Authorization"
@@ -129,7 +134,6 @@ function useLogin() {
       );
     },
     onSuccess: (res) => {
-      console.log("res: ", res);
       if (!res.ok) {
         toast.error(`Login error: ${res.message || "Unknown error"}`);
         return;
@@ -194,38 +198,11 @@ function useFetchNotes() {
   });
 }
 
-function useCreateNote(afterCreate?: (note: TNote) => void) {
+function useUpdateNote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationKey: ["createNote"],
-    mutationFn: async (data: { value: string; date: Date }) => {
-      return api.post("/notes", data).then((res) => {
-        if (!res.data.ok) {
-          throw new Error(res.data.message || "Create note failed");
-        }
-        return res.data.note;
-      });
-    },
-    onError: (error) => {
-      toast.error(
-        `Create note error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    },
-    onSuccess: (res) => {
-      if (afterCreate) {
-        afterCreate(res);
-      }
-      qc.invalidateQueries({ queryKey: ["notes"] });
-    },
-  });
-}
-
-function useUpdateNote() {
-  return useMutation({
     mutationKey: ["updateNote"],
-    mutationFn: async (data: { id: string; value: string; date: Date }) => {
+    mutationFn: async (data: { id: string; value: string; title: string }) => {
       return api.put(`/notes/${data.id}`, data).then((res) => {
         if (!res.data.ok) {
           throw new Error(res.data.message || "Update note failed");
@@ -241,8 +218,8 @@ function useUpdateNote() {
       );
     },
     onSuccess: () => {
-      // FIXME: Temp fix, need to move each note to a separate query to avoid refetching all notes and the update must trigger in a more performant way when apropriate
-      //   qc.invalidateQueries({ queryKey: ["notes"] });
+      qc.invalidateQueries({ queryKey: ["notes"] });
+      qc.invalidateQueries({ queryKey: ["note"] });
     },
   });
 }
@@ -292,7 +269,7 @@ function TextFieldInput({
     <div className="flex flex-col mb-4 relative">
       <input
         type={typeToUse}
-        className="input input-bordered w-64"
+        className="input input-bordered w-64 relative"
         {...props}
         onFocus={() => setIsInteracted(true)}
       />
@@ -300,9 +277,9 @@ function TextFieldInput({
         <button
           type="button"
           onClick={() => setShow(!show)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 z-10 text-gray-600 cursor-pointer"
+          className="absolute right-3 top-5 -translate-y-1/2 z-10 text-gray-600 cursor-pointer"
         >
-          {show ? <EyeOff size={20} /> : <Eye size={20} />}
+          {show ? <Eye size={20} /> : <EyeOff size={20} />}
         </button>
       ) : null}
       {helperText ? (
@@ -351,6 +328,16 @@ function RegisterScreen({
       password: data.password,
     });
   };
+
+  const isRegistering = signUpMutation.isPending;
+
+  if (isRegistering) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Registering...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center h-screen">
@@ -427,6 +414,16 @@ function LoginScreen({
     });
   };
 
+  const isLoggingIn = loginMutation.isPending;
+
+  if (isLoggingIn) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <p>Logging in...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-screen">
       <h2 className="text-3xl mb-6">Welcome to Dain</h2>
@@ -474,69 +471,86 @@ function LoginRegisterScreen() {
 }
 
 function App() {
-  const { data: notes, isLoading: isFetchingNotes } = useFetchNotes();
+  // maintain notes state locally in localstorage, and periodically save to backend
+  const notesInLocalStorage = localStorage.getItem("notes");
+  const parsedNotesInLocalStorage = notesInLocalStorage
+    ? JSON.parse(notesInLocalStorage)
+    : null;
   const [note, setNote] = useState<TUnsavedNote>({
-    _id: "",
     value: "",
-    date: new Date(),
+    title: "",
+    id: v4(),
   });
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const debounce = useDebounce();
+  // notes in backend
+  const { data: notesFromBackend } = useFetchNotes();
 
-  const saveNoteMutation = useCreateNote((savedNote) => {
-    setNote(savedNote);
-    // update url to include note id
-    const url = new URL(window.location.href);
-    url.searchParams.set("noteId", savedNote._id!);
-    window.history.pushState({}, "", url.toString());
-  });
+  // on mount, sync the notes from backend to localstorage - **working for now but monitor for conflicts later**
+  useEffect(() => {
+    if (notesFromBackend && notesFromBackend.length > 0) {
+      let existingNotes: TNote[] = [];
+      const notesInLocalStorage = localStorage.getItem("notes");
+      if (notesInLocalStorage) {
+        existingNotes = JSON.parse(notesInLocalStorage);
+      }
+      // merge notes from backend to localstorage
+      notesFromBackend.forEach((backendNote: TNote) => {
+        const noteIndex = existingNotes.findIndex(
+          (n) => n.id === backendNote.id
+        );
+        if (noteIndex !== -1) {
+          // update existing note
+          existingNotes[noteIndex] = {
+            ...existingNotes[noteIndex],
+            value: backendNote.value,
+            title: backendNote.title,
+            updatedAt: backendNote.updatedAt,
+            createdAt: backendNote.createdAt,
+          };
+        } else {
+          // add new note
+          existingNotes.push({
+            ...backendNote,
+          });
+        }
+      });
+      localStorage.setItem("notes", JSON.stringify(existingNotes));
+    }
+  }, [notesFromBackend]);
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   const updateNoteMutation = useUpdateNote();
   const deleteNoteMutation = useDeleteNote();
 
   const saveNote = useCallback(() => {
     if (!note.value) return;
-    const { _id } = note as TNote;
-    if (_id) {
-      // if nothing changed, don't update
-      const existingNote = notes?.find((n: TNote) => n._id === _id);
-      if (
-        existingNote?.value === note.value &&
-        existingNote?.date === note.date
-      ) {
-        return;
-      }
-      // its an update to existing note
+
+    // if there are changes, save to backend
+    const shouldSaveToBackend = notesFromBackend?.find(
+      (n: TNote) => n.id === note.id
+    );
+    if (
+      !shouldSaveToBackend ||
+      shouldSaveToBackend.value !== note.value ||
+      shouldSaveToBackend.title !== note.title
+    ) {
       updateNoteMutation.mutate({
-        id: _id,
+        id: note.id,
         value: note.value,
-        date: note.date,
+        title: note.title,
       });
-      return;
     }
-    // save note to backend
-    saveNoteMutation.mutate({ value: note.value, date: note.date });
-  }, [note, saveNoteMutation.mutate, updateNoteMutation.mutate, notes?.find]);
+  }, [note, updateNoteMutation.mutate, notesFromBackend?.find]);
 
+  // save note to backend every 5 seconds if there are changes
   useEffect(() => {
-    if (!notes?.length) return;
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const noteId = urlParams.get("noteId");
-
-    if (!noteId) return;
-
-    const noteToOpen = notes.find((n: TNote) => n._id === noteId);
-
-    if (!noteToOpen) return;
-
-    setNote(noteToOpen);
-  }, [notes]);
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
-  useEffect(() => {
-    debounce(saveNote);
-  }, [debounce, note, saveNote]);
+    const interval = setInterval(() => {
+      saveNote();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [saveNote]);
 
   function handleSideBarLeftClick() {
     setIsSidebarOpen((prev) => !prev);
@@ -548,14 +562,10 @@ function App() {
   ) {
     if (e) e.stopPropagation();
 
-    if (!n._id) return;
-
+    saveNote();
+    // load selected note
     setNote(() => n);
     textareaRef.current?.focus();
-    // update url to include note id
-    const url = new URL(window.location.href);
-    url.searchParams.set("noteId", n._id);
-    window.history.pushState({}, "", url.toString());
   }
 
   function handleCreateNewUnsavedNote() {
@@ -565,19 +575,28 @@ function App() {
     // create a new empty note and add it in the state but don't save it yet
     const newNote = {
       value: "",
+      title: "Unsaved Note",
       date: new Date(),
+      id: v4(),
     };
     setNote(() => newNote);
     textareaRef.current?.focus();
-    // remove noteId from url
-    const url = new URL(window.location.href);
-    url.searchParams.delete("noteId");
-    window.history.pushState({}, "", url.toString());
   }
 
   const [menu, setMenu] = useState<null | HTMLElement>(null);
-  const [selectedNote, setSelectedNote] = useState<null | string>(null);
-  const [deleteNote, setDeleteNote] = useState<null | boolean>(null);
+
+  const [action, setAction] = useState<{
+    type: string;
+    payload: Record<string, unknown>;
+  }>({ type: "", payload: {} });
+
+  const onAction = (actionType: string, payload: Record<string, unknown>) => {
+    setAction({ type: actionType, payload });
+  };
+
+  const closeAction = () => {
+    setAction({ type: "", payload: {} });
+  };
 
   function handleShowSavedNoteOptions(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>,
@@ -589,7 +608,7 @@ function App() {
     }
     setMenu(e.currentTarget);
     if (!noteId) return;
-    setSelectedNote(noteId);
+    onAction("showOptions", { noteId });
   }
 
   function handleOpenDeleteSelectedNote(
@@ -597,24 +616,65 @@ function App() {
   ) {
     e.stopPropagation();
     e.preventDefault();
-    setDeleteNote(true);
+    onAction("deleteNote", { noteId: action.payload.noteId });
   }
 
   function handleDeleteSelectedNote(
     e: React.MouseEvent<HTMLButtonElement, MouseEvent>
   ) {
     e.stopPropagation();
-    if (!selectedNote) return;
+    if (!action.payload.noteId) return;
+    // delete note from localstorage
+    let existingNotes: TNote[] = [];
+    const notesInLocalStorage = localStorage.getItem("notes");
+    if (notesInLocalStorage) {
+      existingNotes = JSON.parse(notesInLocalStorage);
+    }
+    const updatedNotes = existingNotes.filter(
+      (n) => n.id !== (action.payload.noteId as string)
+    );
+    localStorage.setItem("notes", JSON.stringify(updatedNotes));
     // mutation to delete note
-    deleteNoteMutation.mutate(selectedNote);
-    // close dialog
-    setDeleteNote(null);
+    deleteNoteMutation.mutate(action.payload.noteId as string);
     setMenu(null);
+    // close dialog
+    closeAction();
     // if the deleted note is currently opened, clear the editor
-    if ((note as TNote)._id === selectedNote) {
-      setNote({ value: "", date: new Date() });
+    if ((note as TNote).id === action.payload.noteId) {
+      setNote({ value: "", title: "", id: v4() });
+      textareaRef.current?.focus();
     }
   }
+
+  const saveInLocalStorage = (noteToSave: TUnsavedNote) => {
+    let existingNotes: TNote[] = [];
+    const notesInLocalStorage = localStorage.getItem("notes");
+    if (notesInLocalStorage) {
+      existingNotes = JSON.parse(notesInLocalStorage);
+    }
+    // check if note already exists in localstorage
+    const noteIndex = existingNotes.findIndex(
+      (n) => n.id === (noteToSave as TNote).id
+    );
+    if (noteIndex !== -1) {
+      // update existing note
+      existingNotes[noteIndex] = {
+        ...existingNotes[noteIndex],
+        value: noteToSave.value,
+        title: noteToSave.title,
+        updatedAt: new Date(),
+        id: noteToSave.id,
+      };
+    } else {
+      // add new note
+      existingNotes.push({
+        ...noteToSave,
+        id: noteToSave.id,
+        updatedAt: new Date(),
+      });
+    }
+    localStorage.setItem("notes", JSON.stringify(existingNotes));
+  };
 
   const logoutMutation = useLogout();
 
@@ -682,7 +742,7 @@ function App() {
         {isSidebarOpen ? (
           <div className="ml-4 mt-6">
             <div className="flex items-center">
-              <p className="text-md text-gray-600">Journals</p>
+              <p className="text-md text-gray-600">Notes</p>
               <button
                 type="button"
                 onClick={handleCreateNewUnsavedNote}
@@ -692,29 +752,27 @@ function App() {
               </button>
             </div>
             <div className="mt-4 mr-2 flex flex-col items-start">
-              {isFetchingNotes && <p>Loading notes...</p>}
-              {notes.map((n: TNote) => (
+              {parsedNotesInLocalStorage?.map((n: TNote) => (
                 <Box
-                  key={n._id}
+                  key={n.id}
                   className={cx(
                     " p-2 btn btn-ghost flex items-center justify-start rounded-md w-full",
-                    note?._id === n?._id ? "btn-active" : ""
+                    note?.id === n?.id ? "btn-active" : ""
                   )}
                   onClick={(e) => handleSelectNote(e, n)}
                 >
                   <p className="text-left font-medium w-[90%]">
-                    {n.value.slice(0, 25) +
-                      (n.value.length > 25 ? "..." : "") || "Empty Journal"}
+                    {n.title || "Untitled Note"}
                   </p>
                   {/* More icon */}
                   <div className="">
                     <IconButton
                       onClick={(e) => {
-                        handleShowSavedNoteOptions(e, n?._id);
+                        handleShowSavedNoteOptions(e, n?.id);
                       }}
                       className={cx(
                         "p-1 opacity-0 hover:opacity-100 transition-opacity",
-                        selectedNote === n._id && "opacity-100"
+                        action.payload.noteId === n.id && "opacity-100"
                       )}
                     >
                       <MoreVertIcon />
@@ -728,16 +786,47 @@ function App() {
       </div>
       <div className="m-0 divider divider-horizontal"></div>
       <div className="w-full h-screen">
+        {/* Content editable div for title of the notes */}
+        <div className="flex w-[75%] mx-auto mt-4">
+          <div
+            className="w-[55%] pl-2 mx-auto focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
+            contentEditable
+            suppressContentEditableWarning={true}
+            autoFocus
+            onBlur={(e) => {
+              const newTitle = e.currentTarget.textContent || "";
+              setNote((prev) => ({ ...prev, title: newTitle }));
+              // save the note state locally in localstorage
+              saveInLocalStorage({ ...note, title: newTitle });
+            }}
+          >
+            <span className="text-4xl font-normal">
+              {(note as TNote).title || "Untitled Note"}
+            </span>
+          </div>
+          <div className="text-right mr-4">
+            <div className="mb-2">
+              <span className="text-sm text-gray-500">Logged in as: </span>
+              <span className="text-sm font-medium">{user?.username}</span>
+            </div>
+            <span className="text-sm text-gray-500">
+              {note.id ? "Last edited: " : "New Note"}{" "}
+              {dayjs(note.updatedAt).format("lll")}
+            </span>
+          </div>
+        </div>
         <div className="w-[55%] mx-auto">
           <textarea
             ref={textareaRef}
             value={note.value}
             onChange={(e) => {
               setNote((prev) => ({ ...prev, value: e.target.value }));
+              // save the note state locally in localstorage
+              saveInLocalStorage({ ...note, value: e.target.value });
             }}
             spellCheck={false}
             // biome-ignore lint/a11y/noAutofocus: <explanation>
-            autoFocus
+            // autoFocus
             className="textarea textarea-ghost text-2xl w-full h-screen focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
             placeholder="Type your thoughts out & let your brain breathe..."
           ></textarea>
@@ -760,10 +849,10 @@ function App() {
 
       {/* Delete Dialog */}
       <Dialog
-        open={!!deleteNote}
+        open={!!action.type && action.type === "deleteNote"}
         onClose={(e: React.MouseEvent<HTMLElement, MouseEvent>) => {
           e.stopPropagation();
-          setDeleteNote(null);
+          closeAction();
         }}
         hideBackdrop
       >
@@ -776,7 +865,7 @@ function App() {
           <Button
             onClick={(e) => {
               e.stopPropagation();
-              setDeleteNote(null);
+              closeAction();
             }}
           >
             Cancel
