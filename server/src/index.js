@@ -78,10 +78,16 @@ const refreshTokenSchema = new mongoose.Schema(
 
 const noteSchema = new mongoose.Schema(
   {
+    // custom id field from client
+    id: {
+      type: String,
+      required: true,
+      unique: true,
+    },
     title: {
       type: String,
       required: true,
-      default: "Untitled",
+      default: "Untitled Note",
     },
     value: {
       type: String,
@@ -436,14 +442,14 @@ const authMiddleware = (req, res, next) => {
 // notes routes
 app.post("/notes", authMiddleware, async (req, res) => {
   try {
-    const { title, value } = req.body;
+    const { title = "", value } = req.body;
     const { userId } = req.user;
     const user = await UserModel.findById(userId);
     if (!user) {
       throw new Error("User not found!");
     }
     const note = await NoteModel.create({
-      title,
+      title: title.trim() || "Untitled Note",
       value,
       user: user._id,
     });
@@ -487,10 +493,11 @@ app.put("/notes/:id", authMiddleware, async (req, res) => {
     if (!user) {
       throw new Error("User not found!");
     }
+    // find if it is present and update or create new
     const note = await NoteModel.findOneAndUpdate(
-      { _id: id, user: userId },
+      { id, user: userId },
       { title, value },
-      { new: true }
+      { new: true, upsert: true }
     ).lean();
     if (!note) {
       return res.status(404).json({ ok: false, message: "Note not found!" });
@@ -510,7 +517,7 @@ app.delete("/notes/:id", authMiddleware, async (req, res) => {
       throw new Error("User not found!");
     }
     const note = await NoteModel.findOneAndDelete(
-      { _id: id, user: userId }
+      { id, user: userId }
     ).lean();
     if (!note) {
       return res.status(404).json({ ok: false, message: "Note not found!" });
