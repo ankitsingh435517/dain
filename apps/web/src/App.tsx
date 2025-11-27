@@ -747,7 +747,7 @@ function App() {
     return <LoginRegisterScreen />;
   }
   return (
-    <div className="flex overflow-hidden h-screen">
+    <div className="flex">
       {/* left side */}
       <div
         className={cx(
@@ -844,7 +844,7 @@ function App() {
       <div className="m-0 divider divider-horizontal"></div>
 
       {/* right side */}
-      <div className="w-full overflow-hidden flex flex-col items-center">
+      <div className="w-full flex flex-col items-center" id={note.id}>
         {/* Content editable div for title of the notes */}
         <div className="w-[55%] mx-auto mt-4">
           <div
