@@ -224,6 +224,31 @@ function useUpdateNote() {
   });
 }
 
+// a bulk update note mutation
+function useBulkUpdateNotes() {
+  return useMutation({
+    mutationKey: ["bulkUpdateNotes"],
+    mutationFn: async (notes: TNote[]) => {
+      return api.put(`/notes-bulk`, { notes }).then((res) => {
+        if (!res.data.ok) {
+          throw new Error(res.data.message || "Bulk update notes failed");
+        }
+        return res.data.notes;
+      });
+    },
+    onError: (error) => {
+      toast.error(
+        `Bulk update notes error: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
+    },
+    onSuccess: () => {
+      // no-op for now
+    },
+  });
+}
+
 function useDeleteNote() {
   const qc = useQueryClient();
   return useMutation({
@@ -484,6 +509,10 @@ function App() {
   // notes in backend
   const { data: notesFromBackend } = useFetchNotes();
 
+  const updateNoteMutation = useUpdateNote();
+  const bulkUpdateNotesMutation = useBulkUpdateNotes();
+  const deleteNoteMutation = useDeleteNote();
+
   // on mount, sync the notes from backend to localstorage - **working for now but monitor for conflicts later**
   useEffect(() => {
     if (notesFromBackend && notesFromBackend.length > 0) {
@@ -517,12 +546,31 @@ function App() {
     }
   }, [notesFromBackend]);
 
+  // on unmount, save the localstorage notes to backend
+  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
+  useEffect(() => {
+    return () => {
+      if (parsedNotesInLocalStorage && parsedNotesInLocalStorage.length > 0) {
+        // mutation to bulk update notes
+        // filter notes which have non-empty value
+        const notesToUpdate = parsedNotesInLocalStorage.filter(
+          (n: TNote) => n.value && n.value.trim() !== ""
+        );
+        console.log("Notes to bulk update on unmount:", notesToUpdate);
+        bulkUpdateNotesMutation.mutate(
+          notesToUpdate.map((n: TNote) => ({
+            id: n.id,
+            value: n.value,
+            title: n.title,
+          }))
+        );
+      }
+    };
+  }, []); // empty dependency array to run only on unmount
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-
-  const updateNoteMutation = useUpdateNote();
-  const deleteNoteMutation = useDeleteNote();
 
   const saveNote = useCallback(() => {
     if (!note.value) return;
@@ -575,7 +623,7 @@ function App() {
     // create a new empty note and add it in the state but don't save it yet
     const newNote = {
       value: "",
-      title: "Unsaved Note",
+      title: "",
       date: new Date(),
       id: v4(),
     };
@@ -647,6 +695,7 @@ function App() {
   }
 
   const saveInLocalStorage = (noteToSave: TUnsavedNote) => {
+    console.log("Saving in localstorage:", noteToSave);
     let existingNotes: TNote[] = [];
     const notesInLocalStorage = localStorage.getItem("notes");
     if (notesInLocalStorage) {
@@ -698,9 +747,15 @@ function App() {
     return <LoginRegisterScreen />;
   }
   return (
-    <div className="flex">
-      <div className={cx("mt-2", isSidebarOpen ? "min-w-[15%]" : "min-w-[2%]")}>
-        <div className="flex items-center justify-between">
+    <div className="flex overflow-hidden h-screen">
+      {/* left side */}
+      <div
+        className={cx(
+          "mt-2 relative",
+          isSidebarOpen ? "min-w-[15%]" : "min-w-[2%]"
+        )}
+      >
+        <div className="flex items-center justify-between overflow-hidden">
           {isSidebarOpen ? (
             <div className="ml-4 flex items-center justify-between">
               <img
@@ -727,18 +782,18 @@ function App() {
             >
               <FiSidebar className="text-lg" />
             </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className={cx(
-                "ml-1 btn btn-ghost border-0 rounded-md px-3 absolute left-0 bottom-0 mb-2"
-              )}
-            >
-              <LogOut className="text-lg" height={18} />
-              {isSidebarOpen ? <span className="mr-2">Logout</span> : null}
-            </button>
           </div>
         </div>
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={cx(
+            "ml-1 btn btn-ghost border-0 rounded-md px-3 absolute left-0 bottom-0 mb-2"
+          )}
+        >
+          <LogOut className="text-lg" height={18} />
+          {isSidebarOpen ? <span className="mr-2">Logout</span> : null}
+        </button>
         {isSidebarOpen ? (
           <div className="ml-4 mt-6">
             <div className="flex items-center">
@@ -751,7 +806,7 @@ function App() {
                 <HiOutlinePencilAlt />
               </button>
             </div>
-            <div className="mt-4 mr-2 flex flex-col items-start">
+            <div className="mt-4 -mr-2 flex flex-col items-start overflow-y-auto h-[80vh]">
               {parsedNotesInLocalStorage?.map((n: TNote) => (
                 <Box
                   key={n.id}
@@ -784,12 +839,16 @@ function App() {
           </div>
         ) : null}
       </div>
+
+      {/* divider */}
       <div className="m-0 divider divider-horizontal"></div>
-      <div className="w-full h-screen">
+
+      {/* right side */}
+      <div className="w-full overflow-hidden flex flex-col items-center">
         {/* Content editable div for title of the notes */}
-        <div className="flex w-[75%] mx-auto mt-4">
+        <div className="w-[55%] mx-auto mt-4">
           <div
-            className="w-[55%] pl-2 mx-auto focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
+            className="w-[75%] mr-auto pl-2.5 focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
             contentEditable
             suppressContentEditableWarning={true}
             autoFocus
@@ -804,7 +863,7 @@ function App() {
               {(note as TNote).title || "Untitled Note"}
             </span>
           </div>
-          <div className="text-right mr-4">
+          <div className="absolute right-0 top-0 text-right mr-4">
             <div className="mb-2">
               <span className="text-sm text-gray-500">Logged in as: </span>
               <span className="text-sm font-medium">{user?.username}</span>
@@ -819,6 +878,7 @@ function App() {
           <textarea
             ref={textareaRef}
             value={note.value}
+            id={note.id}
             onChange={(e) => {
               setNote((prev) => ({ ...prev, value: e.target.value }));
               // save the note state locally in localstorage

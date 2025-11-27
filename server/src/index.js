@@ -508,6 +508,29 @@ app.put("/notes/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// bulk update notes
+app.put("/notes-bulk", authMiddleware, async (req, res) => {
+  try {
+    const { notes } = req.body; // array of notes with id, title, value
+    const { userId } = req.user;
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      throw new Error("User not found!");
+    }
+    const bulkOps = notes.map((note) => ({
+      updateOne: {
+        filter: { id: note.id, user: userId },
+        update: { title: note.title, value: note.value },
+        upsert: true,
+      },
+    }));
+    await NoteModel.bulkWrite(bulkOps);
+    return res.status(200).json({ ok: true, message: "Notes updated successfully!" });
+  } catch (e) {
+    res.json({ ok: false, message: e.message || "Something went wrong!" });
+  }
+});
+
 app.delete("/notes/:id", authMiddleware, async (req, res) => {
   try {
     const { id } = req.params;
