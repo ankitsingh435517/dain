@@ -224,31 +224,6 @@ function useUpdateNote() {
   });
 }
 
-// a bulk update note mutation
-function useBulkUpdateNotes() {
-  return useMutation({
-    mutationKey: ["bulkUpdateNotes"],
-    mutationFn: async (notes: TNote[]) => {
-      return api.put(`/notes-bulk`, { notes }).then((res) => {
-        if (!res.data.ok) {
-          throw new Error(res.data.message || "Bulk update notes failed");
-        }
-        return res.data.notes;
-      });
-    },
-    onError: (error) => {
-      toast.error(
-        `Bulk update notes error: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
-    },
-    onSuccess: () => {
-      // no-op for now
-    },
-  });
-}
-
 function useDeleteNote() {
   const qc = useQueryClient();
   return useMutation({
@@ -510,7 +485,6 @@ function App() {
   const { data: notesFromBackend } = useFetchNotes();
 
   const updateNoteMutation = useUpdateNote();
-  const bulkUpdateNotesMutation = useBulkUpdateNotes();
   const deleteNoteMutation = useDeleteNote();
 
   // on mount, sync the notes from backend to localstorage - **working for now but monitor for conflicts later**
@@ -546,59 +520,40 @@ function App() {
     }
   }, [notesFromBackend]);
 
-  // on unmount, save the localstorage notes to backend
-  // biome-ignore lint/correctness/useExhaustiveDependencies: <explanation>
-  useEffect(() => {
-    return () => {
-      if (parsedNotesInLocalStorage && parsedNotesInLocalStorage.length > 0) {
-        // mutation to bulk update notes
-        // filter notes which have non-empty value
-        const notesToUpdate = parsedNotesInLocalStorage.filter(
-          (n: TNote) => n.value && n.value.trim() !== ""
-        );
-        console.log("Notes to bulk update on unmount:", notesToUpdate);
-        bulkUpdateNotesMutation.mutate(
-          notesToUpdate.map((n: TNote) => ({
-            id: n.id,
-            value: n.value,
-            title: n.title,
-          }))
-        );
-      }
-    };
-  }, []); // empty dependency array to run only on unmount
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const saveNote = useCallback(() => {
-    if (!note.value) return;
+  const saveNote = useCallback(
+    (noteToSave: TUnsavedNote = note) => {
+      if (!noteToSave.value && !noteToSave.title) return;
 
-    // if there are changes, save to backend
-    const shouldSaveToBackend = notesFromBackend?.find(
-      (n: TNote) => n.id === note.id
-    );
-    if (
-      !shouldSaveToBackend ||
-      shouldSaveToBackend.value !== note.value ||
-      shouldSaveToBackend.title !== note.title
-    ) {
-      updateNoteMutation.mutate({
-        id: note.id,
-        value: note.value,
-        title: note.title,
-      });
-    }
-  }, [note, updateNoteMutation.mutate, notesFromBackend?.find]);
+      // if there are changes, save to backend
+      const shouldSaveToBackend = notesFromBackend?.find(
+        (n: TNote) => n.id === noteToSave.id
+      );
+      if (
+        !shouldSaveToBackend ||
+        shouldSaveToBackend.value !== noteToSave.value ||
+        shouldSaveToBackend.title !== noteToSave.title
+      ) {
+        updateNoteMutation.mutate({
+          id: noteToSave.id,
+          value: noteToSave.value,
+          title: noteToSave.title,
+        });
+      }
+    },
+    [note, updateNoteMutation.mutate, notesFromBackend?.find]
+  );
 
   // save note to backend every 5 seconds if there are changes
   useEffect(() => {
     const interval = setInterval(() => {
-      saveNote();
+      saveNote(note);
     }, 5000);
     return () => clearInterval(interval);
-  }, [saveNote]);
+  }, [saveNote, note]);
 
   function handleSideBarLeftClick() {
     setIsSidebarOpen((prev) => !prev);
@@ -610,7 +565,7 @@ function App() {
   ) {
     if (e) e.stopPropagation();
 
-    saveNote();
+    saveNote(note);
     // load selected note
     setNote(() => n);
     textareaRef.current?.focus();
@@ -619,7 +574,7 @@ function App() {
   function handleCreateNewUnsavedNote() {
     if (!note.value) return;
     // save current unsaved
-    saveNote();
+    saveNote(note);
     // create a new empty note and add it in the state but don't save it yet
     const newNote = {
       value: "",
@@ -695,6 +650,7 @@ function App() {
   }
 
   const saveInLocalStorage = (noteToSave: TUnsavedNote) => {
+    saveNote(noteToSave);
     console.log("Saving in localstorage:", noteToSave);
     let existingNotes: TNote[] = [];
     const notesInLocalStorage = localStorage.getItem("notes");
