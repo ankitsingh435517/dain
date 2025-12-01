@@ -26,6 +26,134 @@ import Button from "@mui/material/Button";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import { Box } from "@mui/material";
+import { $getRoot, $getSelection } from "lexical";
+import { LexicalComposer } from "@lexical/react/LexicalComposer";
+import { ContentEditable } from "@lexical/react/LexicalContentEditable";
+import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
+import { RichTextPlugin } from "@lexical/react/LexicalRichTextPlugin";
+import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
+import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
+import emojis from "emoji-datasource";
+
+export type EmojiMatch = Readonly<{
+  position: number;
+  shortcode: string;
+  unifiedID: string;
+}>;
+
+/**
+ * Map where keys are possible replacements while values are unified emoji IDs
+ * These IDs are essentially hex encoded UTF-8 characters
+ */
+const emojiReplacementMap = emojis.reduce<Map<string, string>>((acc, row) => {
+  if (!row.has_img_facebook) {
+    return acc;
+  }
+  acc.set(`:${row.short_name}:`, row.unified);
+
+  if (row.text != null) {
+    acc.set(row.text, row.unified);
+  }
+  if (row.texts != null) {
+    row.texts.forEach((text) => {
+      acc.set(text, row.unified);
+    });
+  }
+
+  return acc;
+}, new Map());
+
+/**
+ * Finds emoji shortcodes in text and if found - returns its position in text, matched shortcode and unified ID
+ */
+function findEmoji(text: string): EmojiMatch | null {
+  const skippedText: string[] = [];
+
+  for (const word of text.split(" ")) {
+    if (!emojiReplacementMap.has(word)) {
+      skippedText.push(word);
+      continue;
+    }
+    if (skippedText.length > 0) {
+      // Compensate for space between skippedText and word
+      skippedText.push("");
+    }
+
+    return {
+      position: skippedText.join(" ").length,
+      shortcode: word,
+      unifiedID: emojiReplacementMap.get(word)!,
+    };
+  }
+
+  return null;
+}
+
+///////////////////////////// -x- //////////////////////////////
+
+const theme = {
+  ltr: "ltr",
+  rtl: "rtl",
+  placeholder: "editor-placeholder",
+  paragraph: "editor-paragraph",
+};
+
+function onError(error: Error) {
+  console.error(error);
+}
+
+function MyOnChangePlugin({
+  onChange,
+}: {
+  onChange: (editorState: any) => void;
+}) {
+  const [editor] = useLexicalComposerContext();
+  useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      onChange(editorState);
+    });
+  }, [editor, onChange]);
+  return null;
+}
+
+function Editor() {
+  const [editorState, setEditorState] = useState<string>("");
+  const initialConfig = {
+    namespace: "MyEditor",
+    theme,
+    onError,
+  };
+
+  function onChange(editorState: any) {
+    const editorStateJSON = editorState.toJSON();
+
+    setEditorState(JSON.stringify(editorStateJSON));
+
+    console.log("Editor State:", editorStateJSON);
+  }
+
+  return (
+    <LexicalComposer initialConfig={initialConfig}>
+      <RichTextPlugin
+        contentEditable={
+          <ContentEditable
+            className="editor-input"
+            aria-placeholder="Enter some text..."
+          />
+        }
+        placeholder={
+          <div className="editor-placeholder">Enter some text...</div>
+        }
+        ErrorBoundary={LexicalErrorBoundary}
+      />
+      <HistoryPlugin />
+      <AutoFocusPlugin />
+      <MyOnChangePlugin onChange={onChange} />
+    </LexicalComposer>
+  );
+}
+
 import dayjs from "dayjs";
 import localizedFormat from "dayjs/plugin/localizedFormat";
 dayjs.extend(localizedFormat);
@@ -703,7 +831,7 @@ function App() {
     return <LoginRegisterScreen />;
   }
   return (
-    <div className="flex">
+    <div className="flex h-screen">
       {/* left side */}
       <div
         className={cx(
@@ -830,8 +958,9 @@ function App() {
             </span>
           </div>
         </div>
-        <div className="w-[55%] mx-auto">
-          <textarea
+        <div className="w-[55%] mx-auto relative">
+          <Editor />
+          {/* <textarea
             ref={textareaRef}
             value={note.value}
             id={note.id}
@@ -845,7 +974,7 @@ function App() {
             // autoFocus
             className="textarea textarea-ghost text-2xl w-full h-screen focus:outline-none transition-opacity duration-200 leading-relaxed resize-none"
             placeholder="Type your thoughts out & let your brain breathe..."
-          ></textarea>
+          ></textarea> */}
         </div>
       </div>
 

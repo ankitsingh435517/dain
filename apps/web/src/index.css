@@ -6,3 +6,27 @@
 .menu-wrapper:hover {
   opacity: 1;
 }
+
+.editor-placeholder {
+  color: #999;
+  overflow: hidden;
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  user-select: none;
+  pointer-events: none;
+}
+
+.editor-paragraph {
+  margin: 0 0 15px 0;
+  position: relative;
+  padding-left: 12px;
+  padding-top: 10px;
+  border: none;
+  outline: none;
+  font-size: larger;
+}
+
+input:focus, textarea:focus, .editor-input:focus {
+    outline: none;
+}
