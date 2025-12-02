@@ -15,6 +15,7 @@
   left: 12px;
   user-select: none;
   pointer-events: none;
+  font-size: larger;
 }
 
 .editor-paragraph {

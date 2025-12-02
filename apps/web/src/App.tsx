@@ -26,7 +26,15 @@ import Button from "@mui/material/Button";
 import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import { Box } from "@mui/material";
-import { $getRoot, $getSelection } from "lexical";
+import {
+    $getEditor,
+  TextNode,
+  type LexicalEditor,
+  type NodeKey,
+  type SerializedTextNode,
+  type Spread,
+} from "lexical";
+import { mergeRegister } from "@lexical/utils";
 import { LexicalComposer } from "@lexical/react/LexicalComposer";
 import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { AutoFocusPlugin } from "@lexical/react/LexicalAutoFocusPlugin";
@@ -35,6 +43,63 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import emojis from "emoji-datasource";
+
+export type SerializedEmojiNode = Spread<
+  {
+    unifiedID: string;
+  },
+  SerializedTextNode
+>;
+
+const BASE_EMOJI_URI = new URL(`@emoji-datasource/`, import.meta.url).href;
+
+export class EmojiNode extends TextNode {
+  static getType() {
+    return "emoji";
+  }
+  static clone(node: EmojiNode): EmojiNode {
+    return new EmojiNode(node.__unifiedId, node.__key);
+  }
+  constructor(unifiedId: string, key?: NodeKey) {
+    super(unifiedId, key);
+  }
+  createDOM() {
+    const span = document.createElement("span");
+    span.className = "emoji-node";
+    span.style.backgroundImage = `url('${BASE_EMOJI_URI}/${this.__unifiedID}.png')`;
+    span.textContent = this.__text;
+    return span;
+  }
+  updateDOM(prevNode, dom) {
+    if (this.__text !== prevNode.__text) {
+      dom.textContent = this.__text;
+    }
+    return false;
+  }
+  static importJSON(serializedNode: SerializedEmojiNode): EmojiNode {
+    return $createEmojiNode(serializedNode.unifiedID).updateFromJSON(
+      serializedNode
+    );
+  }
+
+  exportJSON(): SerializedEmojiNode {
+    return {
+      ...super.exportJSON(),
+      unifiedID: this.__unifiedID,
+    };
+  }
+}
+
+export function $createEmojiNode(unifiedID: string): EmojiNode {
+  const node = new EmojiNode(unifiedID)
+    // In token mode node can be navigated through character-by-character,
+    // but are deleted as a single entity (not invdividually by character).
+    // This also forces Lexical to create adjacent TextNode on user input instead of
+    // modifying Emoji node as it now acts as immutable node.
+    .setMode("token");
+
+  return node;
+}
 
 export type EmojiMatch = Readonly<{
   position: number;
@@ -90,7 +155,43 @@ function findEmoji(text: string): EmojiMatch | null {
   return null;
 }
 
-///////////////////////////// -x- //////////////////////////////
+function textNodeTransform(node: TextNode): void {
+  if (!node.isSimpleText() || node.hasFormat("code")) {
+    return;
+  }
+
+  const text = node.getTextContent();
+
+  // Find only 1st occurrence as transform will be re-run anyway for the rest
+  // because newly inserted nodes are considered to be dirty
+  const emojiMatch = findEmoji(text);
+  if (emojiMatch === null) {
+    return;
+  }
+
+  let targetNode;
+  if (emojiMatch.position === 0) {
+    // First text chunk within string, splitting into 2 parts
+    [targetNode] = node.splitText(
+      emojiMatch.position + emojiMatch.shortcode.length
+    );
+  } else {
+    // In the middle of a string
+    [, targetNode] = node.splitText(
+      emojiMatch.position,
+      emojiMatch.position + emojiMatch.shortcode.length
+    );
+  }
+
+  const emojiNode = $createEmojiNode(emojiMatch.unifiedID);
+  targetNode.replace(emojiNode);
+}
+
+export function registerEmoji(editor: LexicalEditor): () => void {
+  // We don't use editor.registerUpdateListener here as alternative approach where we rely
+  // on update listener is highly discouraged as it triggers an additional render (the most expensive lifecycle operation).
+  return editor.registerNodeTransform(TextNode, textNodeTransform);
+}
 
 const theme = {
   ltr: "ltr",
@@ -119,13 +220,21 @@ function MyOnChangePlugin({
 
 function Editor() {
   const [editorState, setEditorState] = useState<string>("");
+ // FIXME: which part is editor ??
+
   const initialConfig = {
     namespace: "MyEditor",
     theme,
     onError,
   };
 
-  function onChange(editorState: any) {
+  // merge emoji register
+  useEffect(() => {
+      return mergeRegister(registerEmoji(editor));
+    
+  }, [editor]);
+
+  function onChange(editorState: LexicalEditor) {
     const editorStateJSON = editorState.toJSON();
 
     setEditorState(JSON.stringify(editorStateJSON));

@@ -15,6 +15,7 @@
     "@fontsource/roboto": "^5.2.8",
     "@hookform/resolvers": "^5.2.2",
     "@lexical/react": "^0.38.2",
+    "@lexical/utils": "^0.38.2",
     "@mui/icons-material": "^7.3.3",
     "@mui/material": "^7.3.3",
     "@tailwindcss/vite": "^4.1.13",

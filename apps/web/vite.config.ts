@@ -1,19 +1,15 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import tailwindcss from "@tailwindcss/vite";
+import path from "node:path";
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [tailwindcss(), react()],
-//   server: {
-//     proxy: {
-//       "/api": {
-//         target: process.env.VITE_API_URL,
-//         changeOrigin: true,
-//         secure: false,
-//         rewrite: (path) => path.replace(/^\/api/, ""),
-//         cookieDomainRewrite: ''
-//       },
-//     },
-//   },
+  alias: {
+    "@emoji-datasource": path.resolve(
+      __dirname,
+      "node_modules/emoji-datasource/img/apple/sheets/32.png"
+    ),
+  },
 });
